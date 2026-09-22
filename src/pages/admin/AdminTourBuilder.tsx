@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { authService } from '@/services/auth'
 import { propertiesService } from '@/services/properties'
 import { roomsService } from '@/services/rooms'
 import { navPointsService } from '@/services/navPoints'
 import { hotspotsService } from '@/services/hotspots'
-import { authService } from '@/services/auth'
-import type { Property, Room, NavPoint, Hotspot } from '@/types'
 import { getRoomPanoramaUrl, generateDemoFloorPlan } from '@/lib/panorama-assets'
+import { PanoramaDirectionPicker } from '@/components/tour/PanoramaDirectionPicker'
+import type { Property, Room, NavPoint, Hotspot } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -85,8 +86,9 @@ export default function AdminTourBuilder() {
   const [pointIsEntry, setPointIsEntry] = useState(false)
   const [isSavingPoint, setIsSavingPoint] = useState(false)
 
-  // Add Hotspot Modal
+  // Add / Edit Hotspot Modal
   const [hotspotModalOpen, setHotspotModalOpen] = useState(false)
+  const [editingHotspot, setEditingHotspot] = useState<Hotspot | null>(null)
   const [selectedSourceRoom, setSelectedSourceRoom] = useState<Room | null>(null)
   const [selectedSourcePointId, setSelectedSourcePointId] = useState<string>('')
   const [hotspotType, setHotspotType] = useState<'step' | 'door'>('step')
@@ -298,6 +300,7 @@ export default function AdminTourBuilder() {
 
   // ================= HOTSPOT / CONNECTION HANDLERS =================
   const handleOpenAddHotspot = (sourceRoom: Room, defaultPointId?: string) => {
+    setEditingHotspot(null)
     setSelectedSourceRoom(sourceRoom)
     const roomPts = navPoints.filter((p) => p.room === sourceRoom.id)
     const sourcePtId = defaultPointId || roomPts[0]?.id || ''
@@ -324,6 +327,21 @@ export default function AdminTourBuilder() {
     setHotspotModalOpen(true)
   }
 
+  const handleOpenEditHotspot = (hotspot: Hotspot, sourceRoom: Room) => {
+    setEditingHotspot(hotspot)
+    setSelectedSourceRoom(sourceRoom)
+    setSelectedSourcePointId(hotspot.nav_point || '')
+    const isStep =
+      hotspot.type === 'step' ||
+      (hotspot.room === hotspot.target_room && !!hotspot.target_nav_point)
+    setHotspotType(isStep ? 'step' : 'door')
+    setTargetRoomId(hotspot.target_room)
+    setTargetPointId(hotspot.target_nav_point || '')
+    setHotspotDirection(hotspot.direction ?? 0)
+    setHotspotLabel(hotspot.label || '')
+    setHotspotModalOpen(true)
+  }
+
   const handleSaveHotspot = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedSourceRoom || !targetRoomId) {
@@ -333,40 +351,70 @@ export default function AdminTourBuilder() {
 
     try {
       setIsSavingHotspot(true)
-      const created = await hotspotsService.createHotspot({
-        room: selectedSourceRoom.id,
-        target_room: targetRoomId,
-        nav_point: selectedSourcePointId || undefined,
-        target_nav_point: targetPointId || undefined,
-        direction: Math.round(Number(hotspotDirection)) % 360,
-        type: hotspotType,
-        label: hotspotLabel.trim() || undefined,
-      })
-
-      // Expand manually
       const targetRoom = rooms.find((r) => r.id === targetRoomId)
       const sourcePt = navPoints.find((p) => p.id === selectedSourcePointId)
       const targetPt = navPoints.find((p) => p.id === targetPointId)
+      const finalDirection = Math.round(Number(hotspotDirection)) % 360
 
-      const createdWithExpand: Hotspot = {
-        ...created,
-        expand: {
-          room: selectedSourceRoom,
-          target_room: targetRoom,
-          nav_point: sourcePt,
-          target_nav_point: targetPt,
-        },
+      if (editingHotspot) {
+        const updated = await hotspotsService.updateHotspot(editingHotspot.id, {
+          room: selectedSourceRoom.id,
+          target_room: targetRoomId,
+          nav_point: selectedSourcePointId || undefined,
+          target_nav_point: targetPointId || undefined,
+          direction: finalDirection,
+          type: hotspotType,
+          label: hotspotLabel.trim() || undefined,
+        })
+
+        const updatedWithExpand: Hotspot = {
+          ...updated,
+          expand: {
+            room: selectedSourceRoom,
+            target_room: targetRoom,
+            nav_point: sourcePt,
+            target_nav_point: targetPt,
+          },
+        }
+
+        setHotspots((prev) => prev.map((h) => (h.id === updated.id ? updatedWithExpand : h)))
+        toast.success(
+          hotspotType === 'step'
+            ? 'Seta de deslocamento atualizada com sucesso!'
+            : 'Porta de saída atualizada com sucesso!',
+        )
+      } else {
+        const created = await hotspotsService.createHotspot({
+          room: selectedSourceRoom.id,
+          target_room: targetRoomId,
+          nav_point: selectedSourcePointId || undefined,
+          target_nav_point: targetPointId || undefined,
+          direction: finalDirection,
+          type: hotspotType,
+          label: hotspotLabel.trim() || undefined,
+        })
+
+        const createdWithExpand: Hotspot = {
+          ...created,
+          expand: {
+            room: selectedSourceRoom,
+            target_room: targetRoom,
+            nav_point: sourcePt,
+            target_nav_point: targetPt,
+          },
+        }
+
+        setHotspots((prev) => [...prev, createdWithExpand])
+        toast.success(
+          hotspotType === 'step'
+            ? 'Seta de deslocamento no mesmo cômodo criada com sucesso!'
+            : 'Porta de saída criada com sucesso!',
+        )
       }
 
-      setHotspots((prev) => [...prev, createdWithExpand])
-      toast.success(
-        hotspotType === 'step'
-          ? 'Seta de deslocamento no mesmo cômodo criada com sucesso!'
-          : 'Porta de saída criada com sucesso!',
-      )
       setHotspotModalOpen(false)
     } catch (err: any) {
-      toast.error('Erro ao criar conexão: ' + (err?.message || ''))
+      toast.error('Erro ao salvar conexão: ' + (err?.message || ''))
     } finally {
       setIsSavingHotspot(false)
     }
@@ -806,13 +854,22 @@ export default function AdminTourBuilder() {
                                                   </div>
                                                 </div>
 
-                                                <button
-                                                  onClick={() => handleDeleteHotspot(hs.id)}
-                                                  className="text-slate-400 hover:text-red-500 p-1 flex-shrink-0 ml-1"
-                                                  title="Remover conexão"
-                                                >
-                                                  <Trash2 className="w-3 h-3" />
-                                                </button>
+                                                <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
+                                                  <button
+                                                    onClick={() => handleOpenEditHotspot(hs, room)}
+                                                    className="text-slate-400 hover:text-[#1F4E5F] p-1"
+                                                    title="Editar direção e detalhes da conexão"
+                                                  >
+                                                    <Edit className="w-3 h-3" />
+                                                  </button>
+                                                  <button
+                                                    onClick={() => handleDeleteHotspot(hs.id)}
+                                                    className="text-slate-400 hover:text-red-500 p-1"
+                                                    title="Remover conexão"
+                                                  >
+                                                    <Trash2 className="w-3 h-3" />
+                                                  </button>
+                                                </div>
                                               </div>
                                             )
                                           })}
@@ -1107,20 +1164,22 @@ export default function AdminTourBuilder() {
         </DialogContent>
       </Dialog>
 
-      {/* ================= MODAL: ADICIONAR HOTSPOT / SETA DE DESLOCAMENTO ================= */}
+      {/* ================= MODAL: ADICIONAR / EDITAR CONEXÃO / SETA ================= */}
       <Dialog open={hotspotModalOpen} onOpenChange={setHotspotModalOpen}>
-        <DialogContent className="sm:max-w-md bg-white text-[#1C2B36] rounded-2xl">
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto bg-white text-[#1C2B36] rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold">
-              Nova Conexão / Seta de Deslocamento
+              {editingHotspot ? 'Editar Conexão / Seta' : 'Nova Conexão / Seta de Deslocamento'}
             </DialogTitle>
             <p className="text-xs text-[#5B6B76]">
               Origem: <strong>{selectedSourceRoom?.name}</strong> •{' '}
-              <em>{navPoints.find((p) => p.id === selectedSourcePointId)?.name || 'Ponto'}</em>
+              <em>
+                {navPoints.find((p) => p.id === selectedSourcePointId)?.name || 'Ponto Inicial'}
+              </em>
             </p>
           </DialogHeader>
 
-          <form onSubmit={handleSaveHotspot} className="space-y-4 pt-2">
+          <form onSubmit={handleSaveHotspot} className="space-y-4 pt-1">
             {/* Connection Type selector */}
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Tipo de Deslocamento</Label>
@@ -1255,81 +1314,102 @@ export default function AdminTourBuilder() {
               />
             </div>
 
-            {/* Circular Compass Visual Picker */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-semibold">
-                  Direção da Seta no Panorama 360°: {hotspotDirection}°
-                </Label>
-                <span className="text-[11px] text-[#5B6B76]">
-                  {hotspotDirection === 0 && 'Norte (Frente)'}
-                  {hotspotDirection > 0 && hotspotDirection < 90 && 'Nordeste'}
-                  {hotspotDirection === 90 && 'Leste (Direita)'}
-                  {hotspotDirection > 90 && hotspotDirection < 180 && 'Sudeste'}
-                  {hotspotDirection === 180 && 'Sul (Costas)'}
-                  {hotspotDirection > 180 && hotspotDirection < 270 && 'Sudoeste'}
-                  {hotspotDirection === 270 && 'Oeste (Esquerda)'}
-                  {hotspotDirection > 270 && hotspotDirection < 360 && 'Noroeste'}
-                </span>
-              </div>
+            {/* Visual Direction Selector in 360° Panorama */}
+            {(() => {
+              const currentSrcPoint = navPoints.find((p) => p.id === selectedSourcePointId)
+              const pointPanorama = currentSrcPoint?.panorama_image
+                ? navPointsService.getFileUrl(currentSrcPoint, currentSrcPoint.panorama_image)
+                : ''
+              const roomPanorama = selectedSourceRoom?.panorama_image
+                ? roomsService.getFileUrl(selectedSourceRoom, selectedSourceRoom.panorama_image)
+                : ''
+              const activePanoramaUrl = getRoomPanoramaUrl(
+                selectedSourceRoom?.name || '',
+                pointPanorama || roomPanorama,
+                currentSrcPoint?.name,
+              )
 
-              <div className="flex items-center justify-center py-3 bg-[#F7F5F2] rounded-2xl border border-[#E2E6E9]">
-                <div
-                  className="relative w-32 h-32 rounded-full border-2 border-[#1F4E5F] flex items-center justify-center cursor-pointer select-none bg-white shadow-inner"
-                  onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect()
-                    const cx = rect.left + rect.width / 2
-                    const cy = rect.top + rect.height / 2
-                    const dx = e.clientX - cx
-                    const dy = e.clientY - cy
-                    let deg = Math.round(Math.atan2(dx, -dy) * (180 / Math.PI))
-                    if (deg < 0) deg += 360
-                    setHotspotDirection(deg)
-                  }}
-                >
-                  <span className="absolute top-1 text-[9px] font-bold text-[#1F4E5F]">0° N</span>
-                  <span className="absolute right-1 text-[9px] font-bold text-[#1F4E5F]">
-                    90° L
-                  </span>
-                  <span className="absolute bottom-1 text-[9px] font-bold text-[#1F4E5F]">
-                    180° S
-                  </span>
-                  <span className="absolute left-1 text-[9px] font-bold text-[#1F4E5F]">
-                    270° O
-                  </span>
+              const targetPointObj = navPoints.find((p) => p.id === targetPointId)
+              const targetRoomObj = rooms.find((r) => r.id === targetRoomId)
+              const targetDisplayName =
+                hotspotLabel ||
+                (hotspotType === 'step'
+                  ? targetPointObj?.name || 'Próximo ponto'
+                  : targetRoomObj?.name || 'Próximo ambiente')
 
-                  <div
-                    className="absolute w-1 h-12 bg-gradient-to-t from-transparent to-[#E07A3F] origin-bottom rounded transition-transform duration-100"
-                    style={{
-                      bottom: '50%',
-                      transform: `rotate(${hotspotDirection}deg)`,
-                    }}
-                  >
-                    <div className="w-2.5 h-2.5 -top-1 -left-[3px] bg-[#E07A3F] rounded-full absolute shadow-sm" />
+              return (
+                <div className="space-y-2 pt-1 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-xs font-semibold text-[#1C2B36] flex items-center gap-1.5">
+                        <Compass className="w-4 h-4 text-[#E07A3F]" />
+                        <span>Posicionamento Visual no Panorama 360°</span>
+                      </Label>
+                      <p className="text-[11px] text-[#5B6B76]">
+                        Arraste a foto 360° de origem até o local exato onde deseja apontar a seta.
+                      </p>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-[#1F4E5F] bg-[#1F4E5F]/10 px-2 py-0.5 rounded-full">
+                      {Math.round(hotspotDirection)}°
+                    </span>
                   </div>
-                  <div className="w-2.5 h-2.5 bg-[#1F4E5F] rounded-full z-10" />
-                </div>
-              </div>
 
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min="0"
-                  max="359"
-                  value={hotspotDirection}
-                  onChange={(e) => setHotspotDirection(Number(e.target.value))}
-                  className="w-full accent-[#E07A3F]"
-                />
-                <Input
-                  type="number"
-                  min="0"
-                  max="359"
-                  value={hotspotDirection}
-                  onChange={(e) => setHotspotDirection(Number(e.target.value))}
-                  className="w-20 text-center rounded-xl border-[#E2E6E9]"
-                />
-              </div>
-            </div>
+                  {/* Interactive Panorama Picker */}
+                  <PanoramaDirectionPicker
+                    imageUrl={activePanoramaUrl}
+                    roomName={selectedSourceRoom?.name || 'Ambiente'}
+                    pointName={currentSrcPoint?.name}
+                    direction={hotspotDirection}
+                    onChangeDirection={(deg) => setHotspotDirection(deg)}
+                    connectionType={hotspotType}
+                    targetName={targetDisplayName}
+                  />
+
+                  {/* Synchronized Manual controls (Slider, Direct degree input and Compass disk) */}
+                  <div className="bg-[#F7F5F2] p-3 rounded-xl border border-[#E2E6E9] space-y-3">
+                    <div className="flex flex-col sm:flex-row items-center gap-3">
+                      <div className="flex-1 w-full space-y-1">
+                        <div className="flex items-center justify-between text-[11px] text-[#5B6B76]">
+                          <span>0° (Norte)</span>
+                          <span>90° (Leste)</span>
+                          <span>180° (Sul)</span>
+                          <span>270° (Oeste)</span>
+                          <span>359°</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="359"
+                          value={hotspotDirection}
+                          onChange={(e) => setHotspotDirection(Number(e.target.value))}
+                          className="w-full accent-[#E07A3F] cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs text-[#5B6B76]">Ângulo:</span>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            min="0"
+                            max="359"
+                            value={hotspotDirection}
+                            onChange={(e) => {
+                              const val = Math.max(0, Math.min(359, Number(e.target.value) || 0))
+                              setHotspotDirection(val)
+                            }}
+                            className="w-20 pr-6 text-center text-sm font-semibold rounded-lg border-[#E2E6E9]"
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-[#5B6B76]">
+                            °
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             <DialogFooter className="pt-2">
               <Button
@@ -1341,7 +1421,11 @@ export default function AdminTourBuilder() {
                 Cancelar
               </Button>
               <Button type="submit" disabled={isSavingHotspot} className="bg-[#1F4E5F] text-white">
-                {isSavingHotspot ? 'Criando...' : 'Salvar Conexão'}
+                {isSavingHotspot
+                  ? 'Salvando...'
+                  : editingHotspot
+                    ? 'Atualizar Conexão'
+                    : 'Criar Conexão'}
               </Button>
             </DialogFooter>
           </form>
