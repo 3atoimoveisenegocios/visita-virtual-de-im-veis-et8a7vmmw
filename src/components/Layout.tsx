@@ -299,8 +299,8 @@ export default function Layout() {
                 <span className="font-bold text-white text-lg">Visita Virtual de Imóveis</span>
               </div>
               <p className="text-sm text-white/60 leading-relaxed">
-                A experiência imersiva definitiva de tour virtual 360° para corretores e
-                imobiliárias. Navegue por cada ambiente como se estivesse lá.
+                A experiência imersiva definitiva de tour virtual 360° para clientes. Navegue por
+                cada ambiente como se estivesse lá.
               </p>
             </div>
             <div>
@@ -320,8 +320,8 @@ export default function Layout() {
                 Contato & Atendimento
               </h4>
               <p className="text-sm text-white/60 mb-2">Central de Atendimento Imobiliário</p>
-              <p className="text-sm text-white/60">WhatsApp: (11) 99999-8888</p>
-              <p className="text-sm text-white/60">Email: contato@visitavirtual.com.br</p>
+              <p className="text-sm text-white/60">WhatsApp: (11) 4422-7729</p>
+              <p className="text-sm text-white/60">Email: 3atoimoveis@gmail.com</p>
             </div>
           </div>
           <div className="pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between text-xs text-white/40 gap-3">
