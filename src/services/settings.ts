@@ -56,10 +56,10 @@ export const settingsService = {
       case 'pequeno':
         return 'h-8 max-h-8 w-auto'
       case 'grande':
-        return 'h-16 md:h-[72px] max-h-[72px] w-auto'
+        return 'h-[72px] max-h-[72px] w-auto'
       case 'medio':
       default:
-        return 'h-11 md:h-12 max-h-12 w-auto'
+        return 'h-12 max-h-12 w-auto'
     }
   },
 }

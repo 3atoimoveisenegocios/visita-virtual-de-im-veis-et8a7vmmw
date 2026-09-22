@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authService } from '@/services/auth'
 import { settingsService } from '@/services/settings'
+import { getErrorMessage } from '@/lib/pocketbase/errors'
 import type { SiteSettings, LogoSize } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -158,8 +159,11 @@ export default function AdminSettings() {
       // Disparar evento para atualizar Layout em tempo real sem reload forçado
       window.dispatchEvent(new CustomEvent('settings-updated', { detail: updated }))
     } catch (err: any) {
-      console.error(err)
-      toast.error('Erro ao salvar configurações: ' + (err?.message || 'Tente novamente.'))
+      console.error('Erro ao salvar configurações:', err)
+      toast.error(
+        'Erro ao salvar configurações: ' +
+          (getErrorMessage(err) || err?.message || 'Tente novamente.'),
+      )
     } finally {
       setSaving(false)
     }
@@ -418,7 +422,7 @@ export default function AdminSettings() {
                         : 'border-[#E2E6E9] hover:bg-slate-50'
                     }`}
                   >
-                    <RadioGroupItem value="size-medio" id="size-medio" className="mt-0.5" />
+                    <RadioGroupItem value="medio" id="size-medio" className="mt-0.5" />
                     <div className="flex-1">
                       <div className="text-sm font-bold text-[#1C2B36]">Médio</div>
                       <div className="text-xs text-[#5B6B76] mt-0.5">
@@ -439,7 +443,7 @@ export default function AdminSettings() {
                         : 'border-[#E2E6E9] hover:bg-slate-50'
                     }`}
                   >
-                    <RadioGroupItem value="size-grande" id="size-grande" className="mt-0.5" />
+                    <RadioGroupItem value="grande" id="size-grande" className="mt-0.5" />
                     <div className="flex-1">
                       <div className="text-sm font-bold text-[#1C2B36]">Grande</div>
                       <div className="text-xs text-[#5B6B76] mt-0.5">
