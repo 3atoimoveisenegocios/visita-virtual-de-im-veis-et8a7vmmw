@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-22T20:06:43.476Z",
+  "generatedAt": "2026-09-22T20:29:15.680Z",
   "collections": [
     {
       "name": "users",
@@ -253,6 +253,33 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "nav_point",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "nav_points"
+        },
+        {
+          "name": "target_nav_point",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "nav_points"
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["step", "door"]
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -316,6 +343,80 @@
       "indexes": [
         "CREATE INDEX idx_interactions_property ON interactions (property)",
         "CREATE INDEX idx_interactions_created ON interactions (created DESC)"
+      ]
+    },
+    {
+      "name": "nav_points",
+      "type": "base",
+      "apiRules": {
+        "list": "room.property.published = true || @request.auth.id != ''",
+        "view": "room.property.published = true || @request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "room",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "rooms"
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "panorama_image",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pos_x",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pos_y",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "is_entry",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "order",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_nav_points_room ON nav_points (room)",
+        "CREATE INDEX idx_nav_points_created ON nav_points (created ASC)"
       ]
     }
   ]

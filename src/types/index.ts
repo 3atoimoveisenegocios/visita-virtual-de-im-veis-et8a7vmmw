@@ -29,16 +29,39 @@ export interface Room {
   collectionId?: string
 }
 
+export interface NavPoint {
+  id: string
+  room: string
+  name: string
+  panorama_image?: string
+  pos_x?: number
+  pos_y?: number
+  is_entry?: boolean
+  order?: number
+  created: string
+  updated: string
+  collectionId?: string
+  expand?: {
+    room?: Room
+  }
+}
+
 export interface Hotspot {
   id: string
   room: string
   target_room: string
+  nav_point?: string
+  target_nav_point?: string
   direction: number // 0 to 360
+  type?: 'step' | 'door'
+  label?: string
   created: string
   updated: string
   expand?: {
     room?: Room
     target_room?: Room
+    nav_point?: NavPoint
+    target_nav_point?: NavPoint
   }
 }
 

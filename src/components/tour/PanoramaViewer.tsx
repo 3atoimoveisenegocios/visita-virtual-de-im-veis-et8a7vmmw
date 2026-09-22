@@ -6,14 +6,16 @@ import { ChevronRight } from 'lucide-react'
 interface PanoramaViewerProps {
   imageUrl: string
   roomName: string
+  pointName?: string
   hotspots: Hotspot[]
-  onHotspotClick: (targetRoomId: string) => void
+  onHotspotClick: (hotspot: Hotspot) => void
   isLoading?: boolean
 }
 
 export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   imageUrl,
   roomName,
+  pointName,
   hotspots,
   onHotspotClick,
   isLoading = false,
@@ -254,8 +256,10 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       {(isLoading || !imageLoaded) && (
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20">
           <div className="w-12 h-12 border-4 border-white/20 border-t-[#E07A3F] rounded-full animate-spin mb-4" />
-          <p className="text-sm font-medium tracking-wide">Carregando ambiente...</p>
-          <span className="text-xs text-white/60 mt-1">{roomName}</span>
+          <p className="text-sm font-medium tracking-wide">Carregando visualização 360°...</p>
+          <span className="text-xs text-white/60 mt-1">
+            {roomName} {pointName ? `• ${pointName}` : ''}
+          </span>
         </div>
       )}
 
@@ -264,7 +268,16 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         visibleHotspots
           .filter((item) => item.visible)
           .map((item) => {
-            const targetName = item.hotspot.expand?.target_room?.name || 'Próximo ambiente'
+            const isStep =
+              item.hotspot.type === 'step' ||
+              (item.hotspot.room === item.hotspot.target_room && !!item.hotspot.target_nav_point)
+            const targetPointName = item.hotspot.expand?.target_nav_point?.name
+            const targetRoomName = item.hotspot.expand?.target_room?.name
+            const label =
+              item.hotspot.label ||
+              (isStep
+                ? targetPointName || 'Caminhar para cá'
+                : `Ir para ${targetRoomName || 'Próximo ambiente'}`)
 
             return (
               <div
@@ -276,23 +289,53 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
                 }}
                 onClick={(e) => {
                   e.stopPropagation()
-                  onHotspotClick(item.hotspot.target_room)
+                  onHotspotClick(item.hotspot)
                 }}
               >
-                {/* Hotspot Outer Pulsing Ring */}
-                <div className="relative flex items-center justify-center">
-                  <div className="absolute w-12 h-12 rounded-full bg-[#E07A3F]/30 animate-pulse-ring pointer-events-none" />
+                {isStep ? (
+                  /* Street View style displacement arrow / disc indicator */
+                  <div className="relative flex flex-col items-center justify-center">
+                    {/* Perspective floor disc */}
+                    <div className="relative w-16 h-12 flex items-center justify-center">
+                      <div className="absolute w-16 h-8 rounded-[100%] bg-white/25 border-2 border-white shadow-[0_0_15px_rgba(255,255,255,0.6)] animate-pulse pointer-events-none transition-transform group-hover:scale-110 group-hover:bg-[#E07A3F]/40 group-hover:border-[#E07A3F]" />
+                      <div className="relative z-10 w-9 h-9 rounded-full bg-[#E07A3F] text-white flex items-center justify-center shadow-xl border-2 border-white group-hover:scale-110 transition-transform">
+                        {/* Up arrow / chevron forward indicator */}
+                        <svg
+                          className="w-5 h-5 text-white transition-transform group-hover:-translate-y-0.5"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M12 19V5M5 12l7-7 7 7" />
+                        </svg>
+                      </div>
+                    </div>
 
-                  {/* Hotspot Center Icon */}
-                  <div className="w-10 h-10 rounded-full bg-[#1F4E5F] border-2 border-white text-white flex items-center justify-center shadow-lg transition-colors group-hover:bg-[#E07A3F]">
-                    <ChevronRight className="w-5 h-5 transition-transform group-hover:translate-x-0.5" />
+                    {/* Step Tooltip */}
+                    <div className="mt-1 whitespace-nowrap bg-black/85 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg border border-white/20 pointer-events-none transition-all group-hover:bg-[#E07A3F] group-hover:border-white">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                        {label}
+                      </span>
+                    </div>
                   </div>
+                ) : (
+                  /* Door / Room exit circular hotspot */
+                  <div className="relative flex items-center justify-center">
+                    <div className="absolute w-12 h-12 rounded-full bg-[#E07A3F]/30 animate-pulse-ring pointer-events-none" />
 
-                  {/* Tooltip with target room name (always visible on mobile, expandable on desktop) */}
-                  <div className="absolute top-12 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/80 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-md border border-white/20 pointer-events-none transition-opacity duration-200">
-                    Ir para {targetName}
+                    <div className="w-10 h-10 rounded-full bg-[#1F4E5F] border-2 border-white text-white flex items-center justify-center shadow-lg transition-colors group-hover:bg-[#E07A3F]">
+                      <ChevronRight className="w-5 h-5 transition-transform group-hover:translate-x-0.5" />
+                    </div>
+
+                    <div className="absolute top-12 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/85 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-md border border-white/20 pointer-events-none transition-opacity duration-200">
+                      {label}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )
           })}

@@ -5,7 +5,14 @@ export const hotspotsService = {
   async getHotspotsByRoom(roomId: string): Promise<Hotspot[]> {
     return await pb.collection('hotspots').getFullList<Hotspot>({
       filter: `room = "${roomId}"`,
-      expand: 'target_room',
+      expand: 'room,target_room,nav_point,target_nav_point',
+    })
+  },
+
+  async getHotspotsByNavPoint(navPointId: string): Promise<Hotspot[]> {
+    return await pb.collection('hotspots').getFullList<Hotspot>({
+      filter: `nav_point = "${navPointId}"`,
+      expand: 'room,target_room,nav_point,target_nav_point',
     })
   },
 
@@ -14,23 +21,27 @@ export const hotspotsService = {
     const filter = roomIds.map((id) => `room = "${id}"`).join(' || ')
     return await pb.collection('hotspots').getFullList<Hotspot>({
       filter,
-      expand: 'room,target_room',
+      expand: 'room,target_room,nav_point,target_nav_point',
     })
   },
 
   async createHotspot(data: {
     room: string
     target_room: string
+    nav_point?: string
+    target_nav_point?: string
     direction: number
+    type?: 'step' | 'door'
+    label?: string
   }): Promise<Hotspot> {
     return await pb.collection('hotspots').create<Hotspot>(data, {
-      expand: 'target_room',
+      expand: 'room,target_room,nav_point,target_nav_point',
     })
   },
 
   async updateHotspot(id: string, data: Partial<Hotspot>): Promise<Hotspot> {
     return await pb.collection('hotspots').update<Hotspot>(id, data, {
-      expand: 'target_room',
+      expand: 'room,target_room,nav_point,target_nav_point',
     })
   },
 

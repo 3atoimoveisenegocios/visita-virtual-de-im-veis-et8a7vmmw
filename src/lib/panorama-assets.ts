@@ -7,20 +7,37 @@ export const DEMO_PANORAMAS: Record<string, string> = {
   equirect_suite: 'https://photo-sphere-viewer-data.netlify.app/assets/sphere.jpg',
   equirect_kitchen: 'https://pannellum.org/images/bma-0.jpg',
   equirect_rooftop: 'https://photo-sphere-viewer-data.netlify.app/assets/sphere-small.jpg',
+  // Distinct panoramas for multiple points within same room (e.g. living room positions)
+  equirect_dining: 'https://pannellum.org/images/bma-0.jpg',
+  equirect_balcony: 'https://photo-sphere-viewer-data.netlify.app/assets/sphere-small.jpg',
 }
 
 /**
- * Returns a panorama URL for a room.
+ * Returns a panorama URL for a room and/or nav point.
  * Priority:
  * 1. Uploaded PocketBase image file URL if exists
- * 2. Generated procedurally or high quality equirectangular demo panorama fallback based on room name
+ * 2. Generated procedurally or high quality equirectangular demo panorama fallback based on point/room name
  */
-export function getRoomPanoramaUrl(roomName: string, uploadedUrl?: string): string {
+export function getRoomPanoramaUrl(
+  roomName: string,
+  uploadedUrl?: string,
+  pointName?: string,
+): string {
   if (uploadedUrl && uploadedUrl.trim() !== '') {
     return uploadedUrl
   }
 
+  const pName = (pointName || '').toLowerCase()
   const name = roomName.toLowerCase()
+
+  // Specific check for point variations within a room
+  if (pName.includes('jantar')) {
+    return DEMO_PANORAMAS.equirect_dining
+  }
+  if (pName.includes('varanda') || pName.includes('sacada')) {
+    return DEMO_PANORAMAS.equirect_balcony
+  }
+
   if (
     name.includes('suíte') ||
     name.includes('suite') ||
@@ -29,7 +46,7 @@ export function getRoomPanoramaUrl(roomName: string, uploadedUrl?: string): stri
   ) {
     return DEMO_PANORAMAS.equirect_suite
   }
-  if (name.includes('cozinha') || name.includes('jantar') || name.includes('copa')) {
+  if (name.includes('cozinha') || name.includes('copa')) {
     return DEMO_PANORAMAS.equirect_kitchen
   }
   if (
