@@ -270,14 +270,10 @@ export default function VirtualTour() {
   }
 
   const handleWhatsAppClick = () => {
-    if (!property) return
-    interactionsService.recordInteraction(property.id, 'whatsapp_clicked', currentRoom?.id)
-    const phone = (property.whatsapp_number || '5511999998888').replace(/\D/g, '')
-    const currentName = currentRoom?.name || 'Visita 360°'
-    const message = encodeURIComponent(
-      `Olá! Estou fazendo a Visita Virtual 360° no imóvel "${property.title}" (${property.neighborhood}), exatamente no ambiente "${currentName}". Gostaria de tirar algumas dúvidas!`,
-    )
-    window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
+    if (property) {
+      interactionsService.recordInteraction(property.id, 'whatsapp_clicked', currentRoom?.id)
+    }
+    window.open('https://wa.me/551144227729', '_blank', 'noopener,noreferrer')
   }
 
   const formatPrice = (val?: number) => {

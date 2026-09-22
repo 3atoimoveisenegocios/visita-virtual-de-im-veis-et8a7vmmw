@@ -95,6 +95,7 @@ export interface SiteSettings {
   id: string
   hero_image?: string
   logo?: string
+  agency_logo?: string
   logo_size?: LogoSize
   site_title?: string
   created: string

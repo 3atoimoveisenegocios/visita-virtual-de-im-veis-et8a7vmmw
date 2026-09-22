@@ -3,7 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import { propertiesService } from '@/services/properties'
 import { roomsService } from '@/services/rooms'
 import { interactionsService } from '@/services/interactions'
-import type { Property, Room } from '@/types'
+import { settingsService } from '@/services/settings'
+import type { Property, Room, SiteSettings } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -24,6 +25,7 @@ export default function PropertyDetails() {
   const { id } = useParams<{ id: string }>()
   const [property, setProperty] = useState<Property | null>(null)
   const [rooms, setRooms] = useState<Room[]>([])
+  const [settings, setSettings] = useState<SiteSettings | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -31,17 +33,29 @@ export default function PropertyDetails() {
       if (!id) return
       try {
         setLoading(true)
-        const prop = await propertiesService.getPropertyById(id)
+        const [prop, rms, siteSettings] = await Promise.all([
+          propertiesService.getPropertyById(id),
+          roomsService.getRoomsByProperty(id),
+          settingsService.getSettings(),
+        ])
         setProperty(prop)
-        const rms = await roomsService.getRoomsByProperty(id)
         setRooms(rms)
+        setSettings(siteSettings)
       } catch (err) {
-        console.error('Erro ao buscar imóvel:', err)
+        console.error('Erro ao buscar dados:', err)
       } finally {
         setLoading(false)
       }
     }
     loadData()
+
+    const onSettingsUpdated = (e: any) => {
+      if (e?.detail) setSettings(e.detail)
+    }
+    window.addEventListener('settings-updated', onSettingsUpdated)
+    return () => {
+      window.removeEventListener('settings-updated', onSettingsUpdated)
+    }
   }, [id])
 
   const formatPrice = (val: number) => {
@@ -53,13 +67,10 @@ export default function PropertyDetails() {
   }
 
   const handleWhatsAppClick = () => {
-    if (!property) return
-    interactionsService.recordInteraction(property.id, 'whatsapp_clicked')
-    const phone = (property.whatsapp_number || '5511999998888').replace(/\D/g, '')
-    const message = encodeURIComponent(
-      `Olá! Tenho interesse no imóvel "${property.title}" (${property.neighborhood}, ${property.city}) que vi na Visita Virtual 360°. Gostaria de mais informações!`,
-    )
-    window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
+    if (property) {
+      interactionsService.recordInteraction(property.id, 'whatsapp_clicked')
+    }
+    window.open('https://wa.me/551144227729', '_blank', 'noopener,noreferrer')
   }
 
   const handleShare = () => {
@@ -180,12 +191,23 @@ export default function PropertyDetails() {
             </Button>
 
             <Button
+              asChild
               size="lg"
-              onClick={handleWhatsAppClick}
               className="bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-base px-6 py-6 rounded-xl shadow-md"
             >
-              <MessageCircle className="w-5 h-5 mr-2" />
-              Falar com o corretor
+              <a
+                href="https://wa.me/551144227729"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  if (property) {
+                    interactionsService.recordInteraction(property.id, 'whatsapp_clicked')
+                  }
+                }}
+              >
+                <MessageCircle className="w-5 h-5 mr-2" />
+                Fale com o corretor
+              </a>
             </Button>
           </div>
         </div>
@@ -305,20 +327,41 @@ export default function PropertyDetails() {
           <Card className="border-[#E2E6E9] shadow-md bg-white sticky top-24">
             <CardContent className="p-6">
               <div className="text-center pb-6 border-b border-[#E2E6E9]">
-                <div className="w-16 h-16 rounded-full bg-[#1F4E5F] text-white flex items-center justify-center mx-auto mb-3 text-xl font-bold">
-                  3A
-                </div>
-                <h4 className="font-bold text-lg text-[#1C2B36]">Atendimento do Imóvel</h4>
-                <p className="text-xs text-[#5B6B76]">Corretor especialista na região</p>
+                {settings?.agency_logo ? (
+                  <div className="w-16 h-16 rounded-full bg-white border border-[#E2E6E9] shadow-sm flex items-center justify-center mx-auto mb-3 overflow-hidden p-1">
+                    <img
+                      src={settingsService.getFileUrl(settings, settings.agency_logo)}
+                      alt="Logo da Imobiliária"
+                      className="w-full h-full object-contain rounded-full"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-[#1F4E5F] text-white flex items-center justify-center mx-auto mb-3 text-xl font-bold shadow-sm">
+                    3A
+                  </div>
+                )}
+                <h4 className="font-bold text-lg text-[#1C2B36]">3° ATO IMÓVEIS E NEGÓCIOS</h4>
+                <p className="text-xs text-[#5B6B76]">CRECI: 50383-J</p>
               </div>
 
               <div className="py-6 space-y-3">
                 <Button
-                  onClick={handleWhatsAppClick}
-                  className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold py-6 rounded-xl shadow-md"
+                  asChild
+                  className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold py-6 rounded-xl shadow-md text-base"
                 >
-                  <MessageCircle className="w-5 h-5 mr-2" />
-                  Chamar no WhatsApp
+                  <a
+                    href="https://wa.me/551144227729"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => {
+                      if (property) {
+                        interactionsService.recordInteraction(property.id, 'whatsapp_clicked')
+                      }
+                    }}
+                  >
+                    <MessageCircle className="w-5 h-5 mr-2" />
+                    Chamar no Whatsapp
+                  </a>
                 </Button>
 
                 <Button

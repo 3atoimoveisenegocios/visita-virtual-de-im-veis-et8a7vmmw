@@ -32,13 +32,17 @@ export default function AdminSettings() {
   const [heroPreview, setHeroPreview] = useState<string>('')
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState<string>('')
+  const [agencyLogoFile, setAgencyLogoFile] = useState<File | null>(null)
+  const [agencyLogoPreview, setAgencyLogoPreview] = useState<string>('')
 
   // Track removal of existing files
   const [removeHero, setRemoveHero] = useState(false)
   const [removeLogo, setRemoveLogo] = useState(false)
+  const [removeAgencyLogo, setRemoveAgencyLogo] = useState(false)
 
   const heroInputRef = useRef<HTMLInputElement>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
+  const agencyLogoInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!authService.isAuthenticated()) {
@@ -58,6 +62,9 @@ export default function AdminSettings() {
           }
           if (data.logo) {
             setLogoPreview(settingsService.getFileUrl(data, data.logo))
+          }
+          if (data.agency_logo) {
+            setAgencyLogoPreview(settingsService.getFileUrl(data, data.agency_logo))
           }
         }
       } catch (err: any) {
@@ -110,6 +117,26 @@ export default function AdminSettings() {
     if (logoInputRef.current) logoInputRef.current.value = ''
   }
 
+  const handleAgencyLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecione um arquivo de imagem válido (PNG, SVG, JPEG ou WebP).')
+      return
+    }
+    setAgencyLogoFile(file)
+    setRemoveAgencyLogo(false)
+    const url = URL.createObjectURL(file)
+    setAgencyLogoPreview(url)
+  }
+
+  const handleClearAgencyLogo = () => {
+    setAgencyLogoFile(null)
+    setAgencyLogoPreview('')
+    setRemoveAgencyLogo(true)
+    if (agencyLogoInputRef.current) agencyLogoInputRef.current.value = ''
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
@@ -129,6 +156,12 @@ export default function AdminSettings() {
         formData.append('logo', '')
       }
 
+      if (agencyLogoFile) {
+        formData.append('agency_logo', agencyLogoFile)
+      } else if (removeAgencyLogo) {
+        formData.append('agency_logo', '')
+      }
+
       let updated: SiteSettings
       if (settings?.id) {
         updated = await settingsService.updateSettings(settings.id, formData)
@@ -139,8 +172,10 @@ export default function AdminSettings() {
       setSettings(updated)
       setHeroFile(null)
       setLogoFile(null)
+      setAgencyLogoFile(null)
       setRemoveHero(false)
       setRemoveLogo(false)
+      setRemoveAgencyLogo(false)
 
       if (updated.hero_image) {
         setHeroPreview(settingsService.getFileUrl(updated, updated.hero_image))
@@ -152,6 +187,12 @@ export default function AdminSettings() {
         setLogoPreview(settingsService.getFileUrl(updated, updated.logo))
       } else {
         setLogoPreview('')
+      }
+
+      if (updated.agency_logo) {
+        setAgencyLogoPreview(settingsService.getFileUrl(updated, updated.agency_logo))
+      } else {
+        setAgencyLogoPreview('')
       }
 
       toast.success('Configurações de aparência salvas com sucesso!')
@@ -179,7 +220,7 @@ export default function AdminSettings() {
         </h1>
         <p className="text-xs text-[#5B6B76] mt-1">
           Personalize a identidade visual do portal: banner principal (hero da tela inicial), logo
-          da barra superior e tamanho de exibição.
+          da barra superior, logo da imobiliária nos detalhes dos imóveis e tamanho de exibição.
         </p>
       </div>
 
@@ -490,6 +531,116 @@ export default function AdminSettings() {
                       ? `Exibindo logo com tamanho: ${logoSize}`
                       : 'Exibindo fallback padrão (nenhum logo enviado)'}
                   </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Section 3: Agency Logo for Property Details */}
+          <Card className="rounded-2xl border-[#E2E6E9] shadow-sm">
+            <CardHeader className="pb-4 border-b border-[#E2E6E9]">
+              <CardTitle className="text-lg font-bold text-[#1C2B36] flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-[#1F4E5F]" />
+                <span>Logo da Imobiliária (Detalhes do Imóvel)</span>
+              </CardTitle>
+              <CardDescription className="text-xs text-[#5B6B76]">
+                Faça o upload do logo da sua empresa para aparecer no bloco de atendimento da página
+                de detalhes do imóvel (substituindo o placeholder com as iniciais "3A").
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="pt-6 space-y-4">
+              {agencyLogoPreview ? (
+                <div className="border border-[#E2E6E9] rounded-xl p-4 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-white border border-[#E2E6E9] overflow-hidden flex items-center justify-center p-1.5 shadow-sm">
+                      <img
+                        src={agencyLogoPreview}
+                        alt="Pré-visualização do Logo da Imobiliária"
+                        className="w-full h-full object-contain rounded-full"
+                      />
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-[#1C2B36]">
+                        {agencyLogoFile ? agencyLogoFile.name : 'Logo da imobiliária configurado'}
+                      </div>
+                      <div className="text-[11px] text-[#5B6B76]">
+                        Exibido no card "3° ATO IMÓVEIS E NEGÓCIOS" da página de detalhes do imóvel.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => agencyLogoInputRef.current?.click()}
+                      className="text-xs"
+                    >
+                      <Upload className="w-3.5 h-3.5 mr-1" />
+                      Trocar Logo
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleClearAgencyLogo}
+                      className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-1" />
+                      Remover (usar 3A)
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onClick={() => agencyLogoInputRef.current?.click()}
+                  className="border-2 border-dashed border-[#CBD5E1] hover:border-[#1F4E5F] rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-colors bg-slate-50/50 hover:bg-slate-50"
+                >
+                  <div className="w-10 h-10 rounded-full bg-[#1F4E5F]/10 flex items-center justify-center text-[#1F4E5F] mb-2">
+                    <Upload className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs font-semibold text-[#1C2B36] mb-0.5">
+                    Clique para fazer upload do logo da imobiliária
+                  </p>
+                  <p className="text-[11px] text-[#5B6B76]">
+                    Formatos: PNG, SVG, JPG ou WebP (até 10MB). Se não enviar, será exibido o
+                    placeholder padrão com "3A".
+                  </p>
+                </div>
+              )}
+
+              <input
+                ref={agencyLogoInputRef}
+                type="file"
+                accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                onChange={handleAgencyLogoSelect}
+                className="hidden"
+              />
+
+              {/* Live Preview Box for Agency Logo */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-[#E2E6E9] space-y-2">
+                <div className="text-xs font-semibold text-[#1C2B36] flex items-center gap-1.5">
+                  <Check className="w-4 h-4 text-emerald-600" />
+                  <span>Prévia do bloco de atendimento no detalhe do imóvel:</span>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-[#E2E6E9] max-w-sm mx-auto text-center shadow-sm">
+                  {agencyLogoPreview ? (
+                    <div className="w-16 h-16 rounded-full bg-white border border-[#E2E6E9] shadow-sm flex items-center justify-center mx-auto mb-2 overflow-hidden p-1">
+                      <img
+                        src={agencyLogoPreview}
+                        alt="Logo da Imobiliária"
+                        className="w-full h-full object-contain rounded-full"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-[#1F4E5F] text-white flex items-center justify-center mx-auto mb-2 text-xl font-bold shadow-sm">
+                      3A
+                    </div>
+                  )}
+                  <h4 className="font-bold text-base text-[#1C2B36]">3° ATO IMÓVEIS E NEGÓCIOS</h4>
+                  <p className="text-xs text-[#5B6B76]">CRECI: 50383-J</p>
                 </div>
               </div>
             </CardContent>
