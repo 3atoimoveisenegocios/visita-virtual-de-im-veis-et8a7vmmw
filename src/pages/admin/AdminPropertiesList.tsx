@@ -120,14 +120,20 @@ export default function AdminPropertiesList() {
           </p>
         </div>
 
-        <Button asChild className="bg-[#1F4E5F] hover:bg-[#18404E] text-white">
-          <Link to="/admin/imoveis/novo" className="flex items-center gap-2">
-            <PlusCircle className="w-4 h-4" />
-            <span>Novo Imóvel</span>
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" className="border-[#E2E6E9] text-[#1C2B36]">
+            <Link to="/admin/aparencia" className="flex items-center gap-2">
+              <span>Personalizar Banner & Logo</span>
+            </Link>
+          </Button>
+          <Button asChild className="bg-[#1F4E5F] hover:bg-[#18404E] text-white">
+            <Link to="/admin/imoveis/novo" className="flex items-center gap-2">
+              <PlusCircle className="w-4 h-4" />
+              <span>Novo Imóvel</span>
+            </Link>
+          </Button>
+        </div>
       </div>
-
       {/* Loading */}
       {loading && (
         <div className="bg-white rounded-2xl p-12 text-center border border-[#E2E6E9]">

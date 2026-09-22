@@ -10,6 +10,7 @@ import AdminLogin from './pages/admin/AdminLogin'
 import AdminPropertiesList from './pages/admin/AdminPropertiesList'
 import AdminPropertyForm from './pages/admin/AdminPropertyForm'
 import AdminTourBuilder from './pages/admin/AdminTourBuilder'
+import AdminSettings from './pages/admin/AdminSettings'
 import ForgotPassword from './pages/auth/ForgotPassword'
 import ResetPassword from './pages/auth/ResetPassword'
 import VerifyEmail from './pages/auth/VerifyEmail'
@@ -35,6 +36,7 @@ const App = () => (
           <Route path="/admin/imoveis/novo" element={<AdminPropertyForm />} />
           <Route path="/admin/imoveis/:id/editar" element={<AdminPropertyForm />} />
           <Route path="/admin/imoveis/:id/tour" element={<AdminTourBuilder />} />
+          <Route path="/admin/aparencia" element={<AdminSettings />} />
 
           {/* User auth flow pages */}
           <Route path="/forgot-password" element={<ForgotPassword />} />

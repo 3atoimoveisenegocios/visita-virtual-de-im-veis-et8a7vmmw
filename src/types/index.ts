@@ -88,3 +88,16 @@ export interface User {
   avatar?: string
   verified?: boolean
 }
+
+export type LogoSize = 'pequeno' | 'medio' | 'grande'
+
+export interface SiteSettings {
+  id: string
+  hero_image?: string
+  logo?: string
+  logo_size?: LogoSize
+  site_title?: string
+  created: string
+  updated: string
+  collectionId?: string
+}

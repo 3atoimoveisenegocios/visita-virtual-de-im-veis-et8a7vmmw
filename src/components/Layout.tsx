@@ -1,17 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom'
 import { authService } from '@/services/auth'
-import {
-  Compass,
-  Building2,
-  PlusCircle,
-  LogOut,
-  LogIn,
-  Menu,
-  X,
-  ChevronRight,
-  User,
-} from 'lucide-react'
+import { settingsService } from '@/services/settings'
+import type { SiteSettings, LogoSize } from '@/types'
+import { Compass, Building2, PlusCircle, LogOut, Menu, User, Palette } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 
@@ -20,11 +12,10 @@ export default function Layout() {
   const navigate = useNavigate()
   const [scrolled, setScrolled] = useState(false)
   const [mobileAdminOpen, setMobileAdminOpen] = useState(false)
-  const isAuthenticated = authService.isAuthenticated()
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null)
 
   const isTourPage = location.pathname.startsWith('/visita/')
   const isAdminPage = location.pathname.startsWith('/admin') && location.pathname !== '/admin'
-  const isLoginPage = location.pathname === '/admin'
 
   useEffect(() => {
     const handleScroll = () => {
@@ -32,6 +23,34 @@ export default function Layout() {
     }
     window.addEventListener('scroll', handleScroll)
     return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const data = await settingsService.getSettings()
+        if (data) {
+          setSiteSettings(data)
+        }
+      } catch (err) {
+        console.error('Erro ao carregar configurações do site:', err)
+      }
+    }
+
+    loadSettings()
+
+    const handleSettingsUpdated = (e: any) => {
+      if (e?.detail) {
+        setSiteSettings(e.detail)
+      } else {
+        loadSettings()
+      }
+    }
+
+    window.addEventListener('settings-updated', handleSettingsUpdated)
+    return () => {
+      window.removeEventListener('settings-updated', handleSettingsUpdated)
+    }
   }, [])
 
   const handleLogout = () => {
@@ -55,8 +74,18 @@ export default function Layout() {
         {/* Mobile Admin Topbar with Hamburger */}
         <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#1F4E5F] text-white sticky top-0 z-40 shadow-sm">
           <Link to="/" className="flex items-center gap-2 font-bold text-lg">
-            <Compass className="w-5 h-5 text-[#E07A3F]" />
-            <span>Visita Virtual</span>
+            {siteSettings?.logo ? (
+              <img
+                src={settingsService.getFileUrl(siteSettings, siteSettings.logo)}
+                alt="Logo"
+                className="h-8 max-h-8 w-auto object-contain brightness-0 invert"
+              />
+            ) : (
+              <>
+                <Compass className="w-5 h-5 text-[#E07A3F]" />
+                <span>Visita Virtual</span>
+              </>
+            )}
           </Link>
           <Sheet open={mobileAdminOpen} onOpenChange={setMobileAdminOpen}>
             <SheetTrigger asChild>
@@ -89,6 +118,14 @@ export default function Layout() {
                   <span>Novo Imóvel</span>
                 </Link>
                 <Link
+                  to="/admin/aparencia"
+                  onClick={() => setMobileAdminOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-white/10 transition-colors"
+                >
+                  <Palette className="w-4 h-4 text-[#E07A3F]" />
+                  <span>Aparência</span>
+                </Link>
+                <Link
                   to="/"
                   onClick={() => setMobileAdminOpen(false)}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-white/10 transition-colors"
@@ -114,9 +151,19 @@ export default function Layout() {
 
         {/* Desktop Sidebar */}
         <aside className="hidden md:flex flex-col w-64 bg-[#1F4E5F] text-white min-h-screen p-5 flex-shrink-0">
-          <div className="flex items-center gap-2 font-bold text-xl mb-8">
-            <Compass className="w-6 h-6 text-[#E07A3F]" />
-            <span>Visita Virtual</span>
+          <div className="flex items-center gap-2 font-bold text-xl mb-8 min-h-[40px]">
+            {siteSettings?.logo ? (
+              <img
+                src={settingsService.getFileUrl(siteSettings, siteSettings.logo)}
+                alt="Logo"
+                className="max-h-10 max-w-[200px] object-contain brightness-0 invert"
+              />
+            ) : (
+              <>
+                <Compass className="w-6 h-6 text-[#E07A3F]" />
+                <span>Visita Virtual</span>
+              </>
+            )}
           </div>
 
           <div className="text-xs uppercase tracking-wider text-white/50 mb-3 px-2 font-semibold">
@@ -145,6 +192,18 @@ export default function Layout() {
             >
               <PlusCircle className="w-4 h-4 text-[#E07A3F]" />
               <span>Novo Imóvel</span>
+            </Link>
+
+            <Link
+              to="/admin/aparencia"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                location.pathname === '/admin/aparencia'
+                  ? 'bg-white/15 text-white font-semibold'
+                  : 'text-white/80 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              <Palette className="w-4 h-4 text-[#E07A3F]" />
+              <span>Aparência</span>
             </Link>
 
             <div className="text-xs uppercase tracking-wider text-white/50 mt-6 mb-2 px-2 font-semibold">
@@ -190,47 +249,38 @@ export default function Layout() {
       <header
         className={`sticky top-0 z-40 transition-all duration-200 ${
           scrolled
-            ? 'bg-white/90 backdrop-blur-md shadow-sm border-b border-[#E2E6E9]'
-            : 'bg-transparent'
+            ? 'bg-white/95 backdrop-blur-md shadow-sm border-b border-[#E2E6E9]'
+            : 'bg-white/80 backdrop-blur-sm border-b border-[#E2E6E9]/60'
         }`}
       >
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-9 h-9 rounded-lg bg-[#1F4E5F] flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105">
-              <Compass className="w-5 h-5 text-[#E07A3F]" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-bold text-lg leading-none tracking-tight text-[#1F4E5F]">
-                Visita Virtual
-              </span>
-              <span className="text-[10px] tracking-wider uppercase text-[#5B6B76] font-medium">
-                Imóveis em 360°
-              </span>
-            </div>
+        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 min-h-16 py-2 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-3 group py-1">
+            {siteSettings?.logo ? (
+              <img
+                src={settingsService.getFileUrl(siteSettings, siteSettings.logo)}
+                alt="Logo do Portal"
+                className={`object-contain transition-transform group-hover:scale-105 ${settingsService.getLogoSizeClass(
+                  siteSettings.logo_size as LogoSize,
+                )}`}
+              />
+            ) : (
+              <>
+                <div className="w-9 h-9 rounded-lg bg-[#1F4E5F] flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105 flex-shrink-0">
+                  <Compass className="w-5 h-5 text-[#E07A3F]" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-bold text-lg leading-none tracking-tight text-[#1F4E5F]">
+                    Visita Virtual
+                  </span>
+                  <span className="text-[10px] tracking-wider uppercase text-[#5B6B76] font-medium">
+                    Imóveis em 360°
+                  </span>
+                </div>
+              </>
+            )}
           </Link>
 
-          <div className="flex items-center gap-3">
-            {isAuthenticated ? (
-              <Button asChild size="sm" className="bg-[#1F4E5F] hover:bg-[#18404E] text-white">
-                <Link to="/admin/imoveis" className="flex items-center gap-1.5">
-                  <Building2 className="w-4 h-4" />
-                  <span>Painel Admin</span>
-                </Link>
-              </Button>
-            ) : (
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="border-[#1F4E5F] text-[#1F4E5F] hover:bg-[#1F4E5F] hover:text-white transition-colors"
-              >
-                <Link to="/admin" className="flex items-center gap-1.5">
-                  <LogIn className="w-4 h-4" />
-                  <span>Painel Admin</span>
-                </Link>
-              </Button>
-            )}
-          </div>
+          {/* O botão 'Painel Admin' foi removido da barra pública a pedido do usuário (acesso apenas direto por /admin) */}
         </div>
       </header>
 
@@ -261,11 +311,6 @@ export default function Layout() {
                 <li>
                   <Link to="/" className="hover:text-white transition-colors">
                     Imóveis Disponíveis
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/admin" className="hover:text-white transition-colors">
-                    Acesso Corretor / Admin
                   </Link>
                 </li>
               </ul>

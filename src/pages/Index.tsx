@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { propertiesService } from '@/services/properties'
 import { roomsService } from '@/services/rooms'
-import type { Property, Room } from '@/types'
+import { settingsService } from '@/services/settings'
+import type { Property, Room, SiteSettings } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -21,14 +22,19 @@ import {
 export default function Index() {
   const [properties, setProperties] = useState<Property[]>([])
   const [firstRooms, setFirstRooms] = useState<Record<string, Room>>({})
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadData() {
       try {
         setLoading(true)
-        const props = await propertiesService.getPublishedProperties()
+        const [props, settings] = await Promise.all([
+          propertiesService.getPublishedProperties(),
+          settingsService.getSettings(),
+        ])
         setProperties(props)
+        setSiteSettings(settings)
 
         // Fetch first room for each property for cover thumbnail
         const roomsMap: Record<string, Room> = {}
@@ -40,7 +46,7 @@ export default function Index() {
         }
         setFirstRooms(roomsMap)
       } catch (err) {
-        console.error('Erro ao carregar imóveis:', err)
+        console.error('Erro ao carregar imóveis e configurações:', err)
       } finally {
         setLoading(false)
       }
@@ -63,60 +69,60 @@ export default function Index() {
   return (
     <div>
       {/* Hero Section */}
-      <section className="relative min-h-[90vh] flex items-center justify-center text-center overflow-hidden bg-[#1C2B36]">
-        {/* Background photo & dark gradient */}
-        <div
-          className="absolute inset-0 bg-cover bg-center transition-transform duration-1000 scale-105"
-          style={{
-            backgroundImage: `url('https://pannellum.org/images/alma.jpg')`,
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#1C2B36] via-[#1C2B36]/80 to-[#1C2B36]/60 backdrop-blur-[2px]" />
+      {(() => {
+        const heroBgUrl = siteSettings?.hero_image
+          ? settingsService.getFileUrl(siteSettings, siteSettings.hero_image)
+          : 'https://pannellum.org/images/alma.jpg'
 
-        <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 py-20 flex flex-col items-center">
-          <Badge className="bg-[#E07A3F] hover:bg-[#d06d33] text-white text-xs font-semibold px-3 py-1 mb-6 rounded-full uppercase tracking-wider animate-fade-in shadow-md">
-            Tecnologia Imersiva 360°
-          </Badge>
+        return (
+          <section className="relative min-h-[90vh] flex items-center justify-center text-center overflow-hidden bg-[#1C2B36]">
+            {/* Background photo & dark gradient */}
+            <div
+              className="absolute inset-0 bg-cover bg-center transition-all duration-700 scale-105"
+              style={{
+                backgroundImage: `url('${heroBgUrl}')`,
+              }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#1C2B36] via-[#1C2B36]/80 to-[#1C2B36]/60 backdrop-blur-[2px]" />
 
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight leading-[1.1] mb-6 font-['Inter']">
-            Explore imóveis em <span className="text-[#E07A3F]">360°</span> como se estivesse lá
-          </h1>
+            <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 py-20 flex flex-col items-center">
+              <Badge className="bg-[#E07A3F] hover:bg-[#d06d33] text-white text-xs font-semibold px-3 py-1 mb-6 rounded-full uppercase tracking-wider animate-fade-in shadow-md">
+                Tecnologia Imersiva 360°
+              </Badge>
 
-          <p className="text-lg sm:text-xl text-white/80 max-w-2xl mb-10 font-normal leading-relaxed">
-            Navegue por cada cômodo livremente, examine os detalhes em alta resolução e sinta a
-            verdadeira dimensão de cada espaço antes da visita presencial.
-          </p>
+              <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight leading-[1.1] mb-6 font-['Inter']">
+                Explore imóveis em <span className="text-[#E07A3F]">360°</span> como se estivesse lá
+              </h1>
 
-          <div className="flex flex-col sm:flex-row gap-4 items-center">
-            <Button
-              size="lg"
-              onClick={scrollToProperties}
-              className="bg-[#E07A3F] hover:bg-[#d06d33] text-white text-base px-8 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all font-semibold"
-            >
-              <Compass className="w-5 h-5 mr-2" />
-              Ver Imóveis Disponíveis
-            </Button>
-            <Button
-              asChild
-              size="lg"
-              variant="outline"
-              className="border-white/30 text-white bg-white/10 hover:bg-white/20 backdrop-blur-sm text-base px-6 py-6 rounded-xl"
-            >
-              <Link to="/admin">Área do Corretor</Link>
-            </Button>
-          </div>
+              <p className="text-lg sm:text-xl text-white/80 max-w-2xl mb-10 font-normal leading-relaxed">
+                Navegue por cada cômodo livremente, examine os detalhes em alta resolução e sinta a
+                verdadeira dimensão de cada espaço antes da visita presencial.
+              </p>
 
-          {/* Scroll Down Indicator */}
-          <button
-            onClick={scrollToProperties}
-            aria-label="Rolar para baixo"
-            className="mt-16 text-white/70 hover:text-white flex flex-col items-center gap-1 animate-bounce cursor-pointer transition-colors"
-          >
-            <span className="text-xs uppercase tracking-widest font-medium">Conhecer</span>
-            <ChevronDown className="w-5 h-5" />
-          </button>
-        </div>
-      </section>
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <Button
+                  size="lg"
+                  onClick={scrollToProperties}
+                  className="bg-[#E07A3F] hover:bg-[#d06d33] text-white text-base px-8 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all font-semibold"
+                >
+                  <Compass className="w-5 h-5 mr-2" />
+                  Ver Imóveis Disponíveis
+                </Button>
+              </div>
+
+              {/* Scroll Down Indicator */}
+              <button
+                onClick={scrollToProperties}
+                aria-label="Rolar para baixo"
+                className="mt-16 text-white/70 hover:text-white flex flex-col items-center gap-1 animate-bounce cursor-pointer transition-colors"
+              >
+                <span className="text-xs uppercase tracking-widest font-medium">Conhecer</span>
+                <ChevronDown className="w-5 h-5" />
+              </button>
+            </div>
+          </section>
+        )
+      })()}
 
       {/* Property Cards Section */}
       <section id="imoveis-grid" className="max-w-[1200px] mx-auto px-4 sm:px-6 py-16">
@@ -162,14 +168,12 @@ export default function Index() {
             <div className="w-16 h-16 bg-[#1F4E5F]/10 rounded-full flex items-center justify-center mx-auto mb-4 text-[#1F4E5F]">
               <Compass className="w-8 h-8" />
             </div>
-            <h3 className="text-xl font-bold text-[#1C2B36] mb-2">Nenhum imóvel publicado ainda</h3>
-            <p className="text-[#5B6B76] text-sm mb-6 leading-relaxed">
-              Os corretores e administradores podem cadastrar imóveis e montar tours 360° no Painel
-              Admin.
+            <h3 className="text-xl font-bold text-[#1C2B36] mb-2">
+              Nenhum imóvel disponível no momento
+            </h3>
+            <p className="text-[#5B6B76] text-sm mb-2 leading-relaxed">
+              Novas visitas virtuais 360° estão sendo preparadas e estarão disponíveis em breve.
             </p>
-            <Button asChild className="bg-[#1F4E5F] hover:bg-[#18404E] text-white">
-              <Link to="/admin">Acessar Painel Admin</Link>
-            </Button>
           </div>
         )}
 
