@@ -162,7 +162,7 @@ export default function Index() {
                 key={n}
                 className="bg-white rounded-2xl overflow-hidden shadow-sm border border-[#E2E6E9] animate-pulse"
               >
-                <div className="h-64 bg-slate-200" />
+                <div className="w-full aspect-[16/10] bg-slate-200" />
                 <div className="p-6 space-y-4">
                   <div className="h-6 bg-slate-200 rounded w-3/4" />
                   <div className="h-4 bg-slate-200 rounded w-1/2" />
@@ -200,35 +200,39 @@ export default function Index() {
                   ? propertiesService.getFileUrl(firstRoom, firstRoom.panorama_image)
                   : 'https://pannellum.org/images/alma.jpg'
 
+              const hasAmenities = Boolean(
+                prop.bedrooms || prop.bathrooms || prop.parking_spots || prop.area_m2,
+              )
+
               return (
                 <Card
                   key={prop.id}
-                  className="group bg-white rounded-2xl overflow-hidden border border-[#E2E6E9] shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col"
+                  className="group bg-white rounded-2xl overflow-hidden border border-[#E2E6E9] shadow-sm hover:shadow-xl hover:border-[#CBD5E1] transition-all duration-300 hover:-translate-y-1 flex flex-col"
                   style={{ animationDelay: `${idx * 100}ms` }}
                 >
-                  {/* Card Cover Image with Zoom Effect */}
-                  <div className="relative h-64 overflow-hidden bg-[#1C2B36]">
+                  {/* Card Cover Image with Fixed 16:10 Aspect Ratio */}
+                  <div className="relative w-full aspect-[16/10] overflow-hidden bg-gradient-to-br from-[#1C2B36] to-[#0f1920]">
                     <img
                       src={coverUrl}
                       alt={prop.title}
-                      className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+                      className="w-full h-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-105"
                       loading="lazy"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent pointer-events-none" />
 
-                    <Badge className="absolute top-4 left-4 bg-[#1F4E5F]/90 backdrop-blur-md text-white font-semibold flex items-center gap-1.5 px-3 py-1 shadow-sm">
+                    <Badge className="absolute top-4 left-4 bg-[#1F4E5F]/95 backdrop-blur-md text-white text-xs font-semibold flex items-center gap-1.5 px-3 py-1 shadow-md border border-white/10">
                       <Compass className="w-3.5 h-3.5 text-[#E07A3F]" />
                       <span>Tour 360° Ativo</span>
                     </Badge>
 
                     <div className="absolute bottom-4 left-4 right-4 text-white">
-                      <div className="flex items-center gap-1.5 text-xs text-white/80 mb-1">
-                        <MapPin className="w-3.5 h-3.5 text-[#E07A3F]" />
-                        <span>
+                      <div className="flex items-center gap-1.5 text-xs text-white/90 mb-1.5 font-medium">
+                        <MapPin className="w-3.5 h-3.5 text-[#E07A3F] flex-shrink-0" />
+                        <span className="truncate">
                           {prop.neighborhood}, {prop.city}
                         </span>
                       </div>
-                      <h3 className="text-xl font-bold leading-tight group-hover:text-white transition-colors">
+                      <h3 className="text-xl font-bold leading-snug tracking-tight text-white line-clamp-1 drop-shadow-sm">
                         {prop.title}
                       </h3>
                     </div>
@@ -239,60 +243,97 @@ export default function Index() {
                     <div>
                       {/* Price Tag */}
                       <div className="mb-4">
-                        <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
+                        <span className="text-[11px] uppercase text-[#5B6B76] font-bold tracking-wider">
                           Valor de Venda
                         </span>
-                        <div className="text-2xl font-extrabold text-[#1F4E5F]">
+                        <div className="text-2xl font-extrabold text-[#1F4E5F] tracking-tight">
                           {formatPrice(prop.price)}
                         </div>
                       </div>
 
                       {/* Property Amenities Grid */}
-                      <div className="grid grid-cols-4 gap-2 py-3 border-y border-[#E2E6E9] mb-5 text-center text-xs text-[#5B6B76]">
-                        {prop.bedrooms ? (
-                          <div className="flex flex-col items-center">
-                            <Bed className="w-4 h-4 mb-1 text-[#1F4E5F]" />
-                            <span className="font-semibold text-[#1C2B36]">{prop.bedrooms}</span>
-                            <span>Quartos</span>
-                          </div>
-                        ) : null}
-                        {prop.bathrooms ? (
-                          <div className="flex flex-col items-center">
-                            <Bath className="w-4 h-4 mb-1 text-[#1F4E5F]" />
-                            <span className="font-semibold text-[#1C2B36]">{prop.bathrooms}</span>
-                            <span>Banh.</span>
-                          </div>
-                        ) : null}
-                        {prop.parking_spots ? (
-                          <div className="flex flex-col items-center">
-                            <Car className="w-4 h-4 mb-1 text-[#1F4E5F]" />
-                            <span className="font-semibold text-[#1C2B36]">
-                              {prop.parking_spots}
-                            </span>
-                            <span>Vagas</span>
-                          </div>
-                        ) : null}
-                        {prop.area_m2 ? (
-                          <div className="flex flex-col items-center">
-                            <Maximize2 className="w-4 h-4 mb-1 text-[#1F4E5F]" />
-                            <span className="font-semibold text-[#1C2B36]">{prop.area_m2} m²</span>
-                            <span>Área</span>
-                          </div>
-                        ) : null}
-                      </div>
+                      {hasAmenities ? (
+                        <div className="grid grid-cols-4 gap-2 py-3.5 px-2 bg-[#F8FAFC] rounded-xl border border-[#E2E6E9] mb-4 text-center text-xs text-[#5B6B76]">
+                          {prop.bedrooms ? (
+                            <div className="flex flex-col items-center justify-center">
+                              <Bed className="w-4 h-4 mb-1 text-[#1F4E5F]" />
+                              <span className="font-bold text-[#1C2B36] text-xs leading-none">
+                                {prop.bedrooms}
+                              </span>
+                              <span className="text-[10px] mt-0.5 text-[#64748B]">Quartos</span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center opacity-40">
+                              <Bed className="w-4 h-4 mb-1 text-[#94A3B8]" />
+                              <span className="font-bold text-xs leading-none">-</span>
+                              <span className="text-[10px] mt-0.5">Quartos</span>
+                            </div>
+                          )}
 
-                      {prop.description && (
+                          {prop.bathrooms ? (
+                            <div className="flex flex-col items-center justify-center">
+                              <Bath className="w-4 h-4 mb-1 text-[#1F4E5F]" />
+                              <span className="font-bold text-[#1C2B36] text-xs leading-none">
+                                {prop.bathrooms}
+                              </span>
+                              <span className="text-[10px] mt-0.5 text-[#64748B]">Banh.</span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center opacity-40">
+                              <Bath className="w-4 h-4 mb-1 text-[#94A3B8]" />
+                              <span className="font-bold text-xs leading-none">-</span>
+                              <span className="text-[10px] mt-0.5">Banh.</span>
+                            </div>
+                          )}
+
+                          {prop.parking_spots ? (
+                            <div className="flex flex-col items-center justify-center">
+                              <Car className="w-4 h-4 mb-1 text-[#1F4E5F]" />
+                              <span className="font-bold text-[#1C2B36] text-xs leading-none">
+                                {prop.parking_spots}
+                              </span>
+                              <span className="text-[10px] mt-0.5 text-[#64748B]">Vagas</span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center opacity-40">
+                              <Car className="w-4 h-4 mb-1 text-[#94A3B8]" />
+                              <span className="font-bold text-xs leading-none">-</span>
+                              <span className="text-[10px] mt-0.5">Vagas</span>
+                            </div>
+                          )}
+
+                          {prop.area_m2 ? (
+                            <div className="flex flex-col items-center justify-center">
+                              <Maximize2 className="w-4 h-4 mb-1 text-[#1F4E5F]" />
+                              <span className="font-bold text-[#1C2B36] text-xs leading-none truncate max-w-full px-1">
+                                {prop.area_m2} m²
+                              </span>
+                              <span className="text-[10px] mt-0.5 text-[#64748B]">Área</span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center opacity-40">
+                              <Maximize2 className="w-4 h-4 mb-1 text-[#94A3B8]" />
+                              <span className="font-bold text-xs leading-none">-</span>
+                              <span className="text-[10px] mt-0.5">Área</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+
+                      {prop.description ? (
                         <p className="text-xs text-[#5B6B76] line-clamp-2 mb-4 leading-relaxed">
                           {prop.description}
                         </p>
+                      ) : (
+                        <div className="h-2" />
                       )}
                     </div>
 
                     {/* Actions: Start Tour + Details */}
-                    <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+                    <div className="flex flex-col sm:flex-row items-center gap-2 pt-3 border-t border-[#F1F5F9]">
                       <Button
                         asChild
-                        className="w-full sm:flex-1 bg-[#E07A3F] hover:bg-[#d06d33] text-white font-semibold py-5 shadow-sm transition-transform active:scale-95"
+                        className="w-full sm:flex-1 bg-[#E07A3F] hover:bg-[#d06d33] text-white font-semibold py-5 rounded-xl shadow-sm hover:shadow-md transition-all active:scale-[0.98]"
                       >
                         <Link to={`/visita/${prop.id}`}>
                           <Compass className="w-4 h-4 mr-2" />
@@ -303,7 +344,7 @@ export default function Index() {
                       <Button
                         asChild
                         variant="ghost"
-                        className="w-full sm:w-auto text-[#1F4E5F] hover:bg-[#1F4E5F]/10 text-xs font-semibold"
+                        className="w-full sm:w-auto text-[#1F4E5F] hover:bg-[#1F4E5F]/10 text-xs font-semibold rounded-xl py-5 px-4"
                       >
                         <Link to={`/imovel/${prop.id}`} className="flex items-center gap-1">
                           <span>Ver detalhes</span>

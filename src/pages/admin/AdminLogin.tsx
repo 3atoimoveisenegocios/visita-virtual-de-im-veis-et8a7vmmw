@@ -10,8 +10,8 @@ import { toast } from 'sonner'
 
 export default function AdminLogin() {
   const navigate = useNavigate()
-  const [email, setEmail] = useState('3atoimoveis@gmail.com')
-  const [password, setPassword] = useState('Skip@Pass')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -118,7 +118,7 @@ export default function AdminLogin() {
 
           <div className="mt-6 pt-4 border-t border-[#E2E6E9] text-center">
             <p className="text-xs text-[#5B6B76]">
-              Credenciais demonstrativas pré-preenchidas para teste imediato.
+              Acesso restrito à equipe da 3° ATO IMÓVEIS E NEGÓCIOS.
             </p>
           </div>
         </CardContent>
