@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-22T23:07:47.951Z",
+  "generatedAt": "2026-09-23T02:04:51.522Z",
   "collections": [
     {
       "name": "users",
@@ -140,6 +140,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "cover_image",
+          "type": "file",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

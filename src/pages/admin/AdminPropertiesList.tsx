@@ -162,9 +162,11 @@ export default function AdminPropertiesList() {
           {properties.map((prop) => {
             const rms = roomsMap[prop.id] || []
             const firstRoom = rms[0]
-            const coverUrl = firstRoom?.panorama_image
-              ? propertiesService.getFileUrl(firstRoom, firstRoom.panorama_image)
-              : 'https://pannellum.org/images/alma.jpg'
+            const coverUrl = prop.cover_image
+              ? propertiesService.getFileUrl(prop, prop.cover_image)
+              : firstRoom?.panorama_image
+                ? propertiesService.getFileUrl(firstRoom, firstRoom.panorama_image)
+                : 'https://pannellum.org/images/alma.jpg'
 
             return (
               <div

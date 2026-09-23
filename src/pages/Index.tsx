@@ -70,9 +70,21 @@ export default function Index() {
     <div>
       {/* Hero Section */}
       {(() => {
+        // Prioridade do Hero:
+        // 1. Imagem personalizada das configurações (siteSettings.hero_image)
+        // 2. Se não houver, capa do 1º imóvel (cover_image ou panorama do 1º ambiente)
+        // 3. Fallback estático
+        const firstProp = properties[0]
+        const firstPropRoom = firstProp ? firstRooms[firstProp.id] : undefined
+        const firstPropCover = firstProp?.cover_image
+          ? propertiesService.getFileUrl(firstProp, firstProp.cover_image)
+          : firstPropRoom?.panorama_image
+            ? propertiesService.getFileUrl(firstPropRoom, firstPropRoom.panorama_image)
+            : ''
+
         const heroBgUrl = siteSettings?.hero_image
           ? settingsService.getFileUrl(siteSettings, siteSettings.hero_image)
-          : 'https://pannellum.org/images/alma.jpg'
+          : firstPropCover || 'https://pannellum.org/images/alma.jpg'
 
         return (
           <section className="relative min-h-[90vh] flex items-center justify-center text-center overflow-hidden bg-[#1C2B36]">
@@ -182,9 +194,11 @@ export default function Index() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {properties.map((prop, idx) => {
               const firstRoom = firstRooms[prop.id]
-              const coverUrl = firstRoom?.panorama_image
-                ? propertiesService.getFileUrl(firstRoom, firstRoom.panorama_image)
-                : 'https://pannellum.org/images/alma.jpg'
+              const coverUrl = prop.cover_image
+                ? propertiesService.getFileUrl(prop, prop.cover_image)
+                : firstRoom?.panorama_image
+                  ? propertiesService.getFileUrl(firstRoom, firstRoom.panorama_image)
+                  : 'https://pannellum.org/images/alma.jpg'
 
               return (
                 <Card

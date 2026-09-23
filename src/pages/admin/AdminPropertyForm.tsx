@@ -9,7 +9,15 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { ArrowLeft, Save, Building2, UploadCloud, Image as ImageIcon } from 'lucide-react'
+import {
+  ArrowLeft,
+  Save,
+  Building2,
+  UploadCloud,
+  Image as ImageIcon,
+  Trash2,
+  Upload,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function AdminPropertyForm() {
@@ -32,8 +40,13 @@ export default function AdminPropertyForm() {
   const [description, setDescription] = useState('')
   const [whatsappNumber, setWhatsappNumber] = useState('5511999998888')
   const [published, setPublished] = useState(true)
+  const [coverImageFile, setCoverImageFile] = useState<File | null>(null)
+  const [existingCoverImage, setExistingCoverImage] = useState('')
+  const [removeCoverImage, setRemoveCoverImage] = useState(false)
+
   const [floorPlanFile, setFloorPlanFile] = useState<File | null>(null)
   const [existingFloorPlan, setExistingFloorPlan] = useState('')
+  const [removeFloorPlan, setRemoveFloorPlan] = useState(false)
 
   // Field errors
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -64,6 +77,9 @@ export default function AdminPropertyForm() {
       setDescription(prop.description || '')
       setWhatsappNumber(prop.whatsapp_number || '')
       setPublished(Boolean(prop.published))
+      if (prop.cover_image) {
+        setExistingCoverImage(propertiesService.getFileUrl(prop, prop.cover_image))
+      }
       if (prop.floor_plan_image) {
         setExistingFloorPlan(propertiesService.getFileUrl(prop, prop.floor_plan_image))
       }
@@ -107,8 +123,16 @@ export default function AdminPropertyForm() {
       formData.append('whatsapp_number', whatsappNumber.trim())
       formData.append('published', String(published))
 
+      if (coverImageFile) {
+        formData.append('cover_image', coverImageFile)
+      } else if (removeCoverImage) {
+        formData.append('cover_image', '')
+      }
+
       if (floorPlanFile) {
         formData.append('floor_plan_image', floorPlanFile)
+      } else if (removeFloorPlan) {
+        formData.append('floor_plan_image', '')
       }
 
       if (isEditing && id) {
@@ -334,19 +358,183 @@ export default function AdminPropertyForm() {
               </span>
             </div>
 
+            {/* Cover Image Upload (Foto de Capa do Card) */}
+            <div className="space-y-3 pt-2 border-t border-[#E2E6E9]">
+              <div>
+                <Label className="text-xs font-semibold text-[#1C2B36] flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4 text-[#1F4E5F]" />
+                  <span>Foto de Capa do Imóvel (opcional)</span>
+                </Label>
+                <p className="text-[11px] text-[#5B6B76] mt-0.5">
+                  Esta foto será usada no card do imóvel na página inicial e na apresentação. Se não
+                  informada, o sistema usará a foto do 1º ambiente 360° como padrão. Formato comum
+                  (JPG, PNG, WebP).
+                </p>
+              </div>
+
+              {coverImageFile || (!removeCoverImage && existingCoverImage) ? (
+                <div className="border border-[#E2E6E9] rounded-xl p-4 bg-slate-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-28 h-20 rounded-lg border border-[#E2E6E9] bg-slate-900 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                      <img
+                        src={
+                          coverImageFile ? URL.createObjectURL(coverImageFile) : existingCoverImage
+                        }
+                        alt="Pré-visualização da Capa"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-[#1C2B36] truncate max-w-xs">
+                        {coverImageFile ? coverImageFile.name : 'Foto de capa atual cadastrada'}
+                      </div>
+                      <div className="text-[11px] text-[#5B6B76]">
+                        {coverImageFile ? 'Novo arquivo selecionado' : 'Imagem salva no imóvel'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <label className="cursor-pointer inline-flex items-center justify-center h-8 px-3 rounded-md border border-[#E2E6E9] bg-white text-xs font-medium text-[#1C2B36] hover:bg-slate-100 transition-colors">
+                      <Upload className="w-3.5 h-3.5 mr-1.5" />
+                      Substituir
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            const file = e.target.files[0]
+                            if (!file.type.startsWith('image/')) {
+                              toast.error('Selecione uma imagem válida (JPG, PNG, WebP).')
+                              return
+                            }
+                            setCoverImageFile(file)
+                            setRemoveCoverImage(false)
+                          }
+                        }}
+                      />
+                    </label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setCoverImageFile(null)
+                        setRemoveCoverImage(true)
+                      }}
+                      className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                      Remover Capa
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <label className="w-full flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:border-[#1F4E5F] rounded-2xl p-6 cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                  <div className="w-10 h-10 rounded-full bg-[#1F4E5F]/10 flex items-center justify-center text-[#1F4E5F] mb-2">
+                    <UploadCloud className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-semibold text-[#1C2B36] mb-1">
+                    Clique para selecionar a foto de capa do card
+                  </span>
+                  <span className="text-[11px] text-[#5B6B76]">
+                    Formatos aceitos: JPG, PNG, WebP (até 15MB)
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const file = e.target.files[0]
+                        if (!file.type.startsWith('image/')) {
+                          toast.error('Selecione uma imagem válida (JPG, PNG, WebP).')
+                          return
+                        }
+                        setCoverImageFile(file)
+                        setRemoveCoverImage(false)
+                      }
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+
             {/* Floor Plan Upload */}
-            <div className="space-y-2 pt-2 border-t border-[#E2E6E9]">
-              <Label className="text-xs font-semibold text-[#1C2B36] flex items-center gap-1.5">
-                <ImageIcon className="w-4 h-4 text-[#1F4E5F]" />
-                <span>Imagem da Planta do Imóvel (opcional)</span>
-              </Label>
-              <div className="flex flex-col sm:flex-row items-center gap-4">
-                <label className="flex-1 w-full flex flex-col items-center justify-center border-2 border-dashed border-[#E2E6E9] hover:border-[#1F4E5F] rounded-2xl p-4 cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                  <UploadCloud className="w-6 h-6 text-[#1F4E5F] mb-1" />
-                  <span className="text-xs font-medium text-[#1C2B36]">
-                    {floorPlanFile
-                      ? floorPlanFile.name
-                      : 'Selecionar imagem da planta (JPG, PNG, SVG)'}
+            <div className="space-y-3 pt-2 border-t border-[#E2E6E9]">
+              <div>
+                <Label className="text-xs font-semibold text-[#1C2B36] flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4 text-[#1F4E5F]" />
+                  <span>Imagem da Planta do Imóvel (opcional)</span>
+                </Label>
+                <p className="text-[11px] text-[#5B6B76] mt-0.5">
+                  Planta baixa humanizada ou desenho arquitetônico para navegação interativa no
+                  tour.
+                </p>
+              </div>
+
+              {floorPlanFile || (!removeFloorPlan && existingFloorPlan) ? (
+                <div className="border border-[#E2E6E9] rounded-xl p-4 bg-slate-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-28 h-20 rounded-lg border border-[#E2E6E9] bg-white overflow-hidden p-1 flex-shrink-0 flex items-center justify-center">
+                      <img
+                        src={floorPlanFile ? URL.createObjectURL(floorPlanFile) : existingFloorPlan}
+                        alt="Preview Planta"
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-[#1C2B36] truncate max-w-xs">
+                        {floorPlanFile ? floorPlanFile.name : 'Planta atual cadastrada'}
+                      </div>
+                      <div className="text-[11px] text-[#5B6B76]">
+                        {floorPlanFile ? 'Novo arquivo selecionado' : 'Arquivo salvo no imóvel'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <label className="cursor-pointer inline-flex items-center justify-center h-8 px-3 rounded-md border border-[#E2E6E9] bg-white text-xs font-medium text-[#1C2B36] hover:bg-slate-100 transition-colors">
+                      <Upload className="w-3.5 h-3.5 mr-1.5" />
+                      Substituir
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            setFloorPlanFile(e.target.files[0])
+                            setRemoveFloorPlan(false)
+                          }
+                        }}
+                      />
+                    </label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setFloorPlanFile(null)
+                        setRemoveFloorPlan(true)
+                      }}
+                      className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                      Remover Planta
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <label className="w-full flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:border-[#1F4E5F] rounded-2xl p-6 cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                  <div className="w-10 h-10 rounded-full bg-[#1F4E5F]/10 flex items-center justify-center text-[#1F4E5F] mb-2">
+                    <UploadCloud className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-semibold text-[#1C2B36] mb-1">
+                    Selecionar imagem da planta (JPG, PNG, SVG)
+                  </span>
+                  <span className="text-[11px] text-[#5B6B76]">
+                    Formatos aceitos: JPG, PNG, SVG, WebP (até 15MB)
                   </span>
                   <input
                     type="file"
@@ -355,22 +543,12 @@ export default function AdminPropertyForm() {
                     onChange={(e) => {
                       if (e.target.files && e.target.files[0]) {
                         setFloorPlanFile(e.target.files[0])
+                        setRemoveFloorPlan(false)
                       }
                     }}
                   />
                 </label>
-
-                {/* Preview existing or selected */}
-                {(floorPlanFile || existingFloorPlan) && (
-                  <div className="w-24 h-24 rounded-xl border border-[#E2E6E9] overflow-hidden bg-white p-1 flex-shrink-0 flex items-center justify-center">
-                    <img
-                      src={floorPlanFile ? URL.createObjectURL(floorPlanFile) : existingFloorPlan}
-                      alt="Preview Planta"
-                      className="max-h-full max-w-full object-contain"
-                    />
-                  </div>
-                )}
-              </div>
+              )}
             </div>
 
             {/* Published Toggle */}

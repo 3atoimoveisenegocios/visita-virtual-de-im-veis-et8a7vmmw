@@ -160,58 +160,69 @@ export default function PropertyDetails() {
       </div>
 
       {/* Hero CTA Box to launch 360° tour */}
-      <div className="relative rounded-3xl overflow-hidden bg-[#1C2B36] mb-12 shadow-xl border border-[#1F4E5F]">
-        <div
-          className="h-80 sm:h-96 bg-cover bg-center transition-transform duration-700 hover:scale-105"
-          style={{
-            backgroundImage: `url('https://pannellum.org/images/alma.jpg')`,
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-6 sm:p-10">
-          <Badge className="bg-[#E07A3F] text-white self-start mb-3 px-3 py-1 font-semibold uppercase tracking-wider text-xs">
-            Experiência Virtual
-          </Badge>
-          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-            Faça a Visita Virtual 360° Completa
-          </h2>
-          <p className="text-white/80 max-w-xl text-sm sm:text-base mb-6">
-            Explore todos os cômodos com visualização 360°, alterne os ambientes pelos hotspots da
-            porta ou pela planta interativa.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <Button
-              asChild
-              size="lg"
-              className="bg-[#E07A3F] hover:bg-[#d06d33] text-white font-bold text-base px-8 py-6 rounded-xl shadow-lg hover:shadow-2xl transition-transform active:scale-95"
-            >
-              <Link to={`/visita/${property.id}`}>
-                <Compass className="w-5 h-5 mr-2" />
-                Iniciar Visita Virtual 360°
-              </Link>
-            </Button>
+      {(() => {
+        const firstRoom = rooms[0]
+        const ctaBgUrl = property.cover_image
+          ? propertiesService.getFileUrl(property, property.cover_image)
+          : firstRoom?.panorama_image
+            ? roomsService.getFileUrl(firstRoom, firstRoom.panorama_image)
+            : 'https://pannellum.org/images/alma.jpg'
 
-            <Button
-              asChild
-              size="lg"
-              className="bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-base px-6 py-6 rounded-xl shadow-md"
-            >
-              <a
-                href="https://wa.me/551144227729"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => {
-                  if (property) {
-                    interactionsService.recordInteraction(property.id, 'whatsapp_clicked')
-                  }
-                }}
-              >
-                <MessageCircle className="w-5 h-5 mr-2" />
-                Fale com o corretor
-              </a>
-            </Button>
+        return (
+          <div className="relative rounded-3xl overflow-hidden bg-[#1C2B36] mb-12 shadow-xl border border-[#1F4E5F]">
+            <div
+              className="h-80 sm:h-96 bg-cover bg-center transition-transform duration-700 hover:scale-105"
+              style={{
+                backgroundImage: `url('${ctaBgUrl}')`,
+              }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-6 sm:p-10">
+              <Badge className="bg-[#E07A3F] text-white self-start mb-3 px-3 py-1 font-semibold uppercase tracking-wider text-xs">
+                Experiência Virtual
+              </Badge>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+                Faça a Visita Virtual 360° Completa
+              </h2>
+              <p className="text-white/80 max-w-xl text-sm sm:text-base mb-6">
+                Explore todos os cômodos com visualização 360°, alterne os ambientes pelos hotspots
+                da porta ou pela planta interativa.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Button
+                  asChild
+                  size="lg"
+                  className="bg-[#E07A3F] hover:bg-[#d06d33] text-white font-bold text-base px-8 py-6 rounded-xl shadow-lg hover:shadow-2xl transition-transform active:scale-95"
+                >
+                  <Link to={`/visita/${property.id}`}>
+                    <Compass className="w-5 h-5 mr-2" />
+                    Iniciar Visita Virtual 360°
+                  </Link>
+                </Button>
+
+                <Button
+                  asChild
+                  size="lg"
+                  className="bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-base px-6 py-6 rounded-xl shadow-md"
+                >
+                  <a
+                    href="https://wa.me/551144227729"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => {
+                      if (property) {
+                        interactionsService.recordInteraction(property.id, 'whatsapp_clicked')
+                      }
+                    }}
+                  >
+                    <MessageCircle className="w-5 h-5 mr-2" />
+                    Fale com o corretor
+                  </a>
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        )
+      })()}
 
       {/* Gallery of Rooms (Horizontal Scrollable Strip) */}
       <div className="mb-12">

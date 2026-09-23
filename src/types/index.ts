@@ -11,6 +11,7 @@ export interface Property {
   description?: string
   whatsapp_number?: string
   published: boolean
+  cover_image?: string
   floor_plan_image?: string
   created: string
   updated: string
