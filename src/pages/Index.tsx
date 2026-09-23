@@ -87,7 +87,7 @@ export default function Index() {
           : firstPropCover || 'https://pannellum.org/images/alma.jpg'
 
         return (
-          <section className="relative min-h-[90vh] flex items-center justify-center text-center overflow-hidden bg-[#1C2B36]">
+          <section className="relative min-h-[92vh] sm:min-h-[95vh] flex items-center justify-center text-center overflow-hidden bg-[#1C2B36] pt-24 sm:pt-28 pb-16">
             {/* Background photo & dark gradient */}
             <div
               className="absolute inset-0 bg-cover bg-center transition-all duration-700 scale-105"
@@ -95,9 +95,9 @@ export default function Index() {
                 backgroundImage: `url('${heroBgUrl}')`,
               }}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#1C2B36] via-[#1C2B36]/80 to-[#1C2B36]/60 backdrop-blur-[2px]" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#1C2B36] via-[#1C2B36]/80 to-[#1C2B36]/70 backdrop-blur-[2px]" />
 
-            <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 py-20 flex flex-col items-center">
+            <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16 flex flex-col items-center">
               <Badge className="bg-[#E07A3F] hover:bg-[#d06d33] text-white text-xs font-semibold px-3 py-1 mb-6 rounded-full uppercase tracking-wider animate-fade-in shadow-md">
                 Tecnologia Imersiva 360°
               </Badge>

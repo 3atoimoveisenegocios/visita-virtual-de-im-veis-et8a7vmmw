@@ -6,24 +6,18 @@ import type { SiteSettings, LogoSize } from '@/types'
 import { Compass, Building2, PlusCircle, LogOut, Menu, User, Palette } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { NavigationHeader } from '@/components/NavigationHeader'
+import { cn } from '@/lib/utils'
 
 export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
-  const [scrolled, setScrolled] = useState(false)
   const [mobileAdminOpen, setMobileAdminOpen] = useState(false)
   const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null)
 
   const isTourPage = location.pathname.startsWith('/visita/')
   const isAdminPage = location.pathname.startsWith('/admin') && location.pathname !== '/admin'
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20)
-    }
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
+  const isHome = location.pathname === '/'
 
   useEffect(() => {
     async function loadSettings() {
@@ -245,47 +239,11 @@ export default function Layout() {
   // Public Screens (Index, Property Details, Auth standalone pages)
   return (
     <div className="min-h-screen flex flex-col bg-[#F7F5F2] text-[#1C2B36]">
-      {/* Public Top Navbar */}
-      <header
-        className={`sticky top-0 z-40 transition-all duration-200 ${
-          scrolled
-            ? 'bg-white/95 backdrop-blur-md shadow-sm border-b border-[#E2E6E9]'
-            : 'bg-white/80 backdrop-blur-sm border-b border-[#E2E6E9]/60'
-        }`}
-      >
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 min-h-16 py-2 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 group py-1">
-            {siteSettings?.logo ? (
-              <img
-                src={settingsService.getFileUrl(siteSettings, siteSettings.logo)}
-                alt="Logo do Portal"
-                className={`object-contain transition-transform group-hover:scale-105 ${settingsService.getLogoSizeClass(
-                  siteSettings.logo_size as LogoSize,
-                )}`}
-              />
-            ) : (
-              <>
-                <div className="w-9 h-9 rounded-lg bg-[#1F4E5F] flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105 flex-shrink-0">
-                  <Compass className="w-5 h-5 text-[#E07A3F]" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-bold text-lg leading-none tracking-tight text-[#1F4E5F]">
-                    Visita Virtual
-                  </span>
-                  <span className="text-[10px] tracking-wider uppercase text-[#5B6B76] font-medium">
-                    Imóveis em 360°
-                  </span>
-                </div>
-              </>
-            )}
-          </Link>
+      {/* Public Top Navigation Bar (with 3° ATO identity & menu) */}
+      <NavigationHeader siteSettings={siteSettings} />
 
-          {/* O botão 'Painel Admin' foi removido da barra pública a pedido do usuário (acesso apenas direto por /admin) */}
-        </div>
-      </header>
-
-      {/* Main Page Content */}
-      <main className="flex-1">
+      {/* Main Page Content - padding top on subpages so content isn't under fixed header */}
+      <main className={cn('flex-1', !isHome && 'pt-20 sm:pt-24')}>
         <Outlet />
       </main>
 
@@ -296,22 +254,56 @@ export default function Layout() {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Compass className="w-6 h-6 text-[#E07A3F]" />
-                <span className="font-bold text-white text-lg">Visita Virtual de Imóveis</span>
+                <span className="font-bold text-white text-lg">3° ATO IMÓVEIS E NEGÓCIOS</span>
               </div>
-              <p className="text-sm text-white/60 leading-relaxed">
+              <p className="text-sm text-white/60 leading-relaxed mb-3">
                 A experiência imersiva definitiva de tour virtual 360° para clientes. Navegue por
                 cada ambiente como se estivesse lá.
               </p>
+              <p className="text-xs text-white/40">CRECI: 50383-J</p>
             </div>
             <div>
               <h4 className="text-white font-semibold text-sm mb-3 uppercase tracking-wider">
-                Navegação
+                Links Rápidos
               </h4>
               <ul className="space-y-2 text-sm text-white/60">
                 <li>
                   <Link to="/" className="hover:text-white transition-colors">
-                    Imóveis Disponíveis
+                    Home
                   </Link>
+                </li>
+                <li>
+                  <a
+                    href="https://3atoimoveis.com.br/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-white transition-colors inline-flex items-center gap-1"
+                  >
+                    <span>Site Principal</span>
+                    <span className="text-xs opacity-60">↗</span>
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://cadastreseuimovel.3atoimoveis.com.br/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-white transition-colors inline-flex items-center gap-1"
+                  >
+                    <span>Cadastre seu Imóvel</span>
+                    <span className="text-xs opacity-60">↗</span>
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://portaldocliente.3atoimoveis.com.br/login"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-white transition-colors inline-flex items-center gap-1"
+                  >
+                    <span>Portal do Cliente</span>
+                    <span className="text-xs opacity-60">↗</span>
+                  </a>
                 </li>
               </ul>
             </div>
