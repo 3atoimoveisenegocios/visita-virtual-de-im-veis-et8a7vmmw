@@ -67,10 +67,12 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.6.1",
     "tailwindcss-animate": "^1.0.7",
+    "three": "^0.174.0",
     "vaul": "^1.1.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/three": "^0.174.0",
     "@tailwindcss/typography": "^0.5.20",
     "@types/node": "^26.0.0",
     "@types/react": "^19.2.17",

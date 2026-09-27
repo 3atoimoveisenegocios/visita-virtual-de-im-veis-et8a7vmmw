@@ -1,5 +1,13 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import * as THREE from 'three'
 import { generateProceduralPanorama } from '@/lib/panorama-assets'
+import {
+  DEFAULT_PANORAMA_FOV,
+  MIN_PANORAMA_FOV,
+  MAX_PANORAMA_FOV,
+  isWebGLAvailable,
+  sphericalToVector3,
+} from '@/lib/panorama-spherical'
 import { RotateCw, Compass, ZoomIn, ZoomOut, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -22,26 +30,20 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
   connectionType = 'step',
   targetName,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const mountRef = useRef<HTMLDivElement>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
-  const [imgElement, setImgElement] = useState<HTMLImageElement | null>(null)
   const [loadError, setLoadError] = useState(false)
+  const [webglSupported, setWebglSupported] = useState(true)
 
-  // Current viewing yaw (0..360) and pitch (-85..85)
+  // Current viewing yaw (0..360) and pitch (-80..80)
   // Direction directly corresponds to yaw! When user looks at the center crosshair,
   // the compass direction is the center yaw.
-  const DEFAULT_FOV = 95
-  const MIN_FOV = 45
-  const MAX_FOV = 135
-
-  const yawRef = useRef<number>(direction)
+  const yawRef = useRef<number>((direction + 360) % 360)
   const pitchRef = useRef<number>(0)
-  const fovRef = useRef<number>(DEFAULT_FOV)
+  const fovRef = useRef<number>(DEFAULT_PANORAMA_FOV)
 
   // Sync yawRef when direction changes from external (e.g. numeric input or slider)
   useEffect(() => {
-    // Only update if discrepancy is noticeable to prevent fighting during drag
     const diff = Math.abs((yawRef.current - direction + 360) % 360)
     if (diff > 1 && diff < 359 && !isDraggingRef.current) {
       yawRef.current = (direction + 360) % 360
@@ -53,140 +55,205 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map())
   const initialPinchDistRef = useRef<number | null>(null)
-  const initialPinchFovRef = useRef<number>(DEFAULT_FOV)
+  const initialPinchFovRef = useRef<number>(DEFAULT_PANORAMA_FOV)
 
-  // Load image with fallback to procedural panorama
+  // Three.js instances ref
+  const threeRefs = useRef<{
+    renderer: THREE.WebGLRenderer | null
+    scene: THREE.Scene | null
+    camera: THREE.PerspectiveCamera | null
+    mesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial> | null
+    texture: THREE.Texture | null
+    animId: number | null
+  }>({
+    renderer: null,
+    scene: null,
+    camera: null,
+    mesh: null,
+    texture: null,
+    animId: null,
+  })
+
+  // Check WebGL availability
+  useEffect(() => {
+    setWebglSupported(isWebGLAvailable())
+  }, [])
+
+  // Initialize Three.js scene for spherical 360° rendering
+  useEffect(() => {
+    const container = mountRef.current
+    if (!container || !webglSupported) return
+
+    const width = container.clientWidth || 400
+    const height = container.clientHeight || 300
+
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(fovRef.current, width / height, 0.1, 1500)
+    camera.position.set(0, 0, 0)
+
+    let renderer: THREE.WebGLRenderer
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: false,
+        powerPreference: 'high-performance',
+      })
+    } catch {
+      setWebglSupported(false)
+      return
+    }
+
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    renderer.setSize(width, height)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.domElement.style.width = '100%'
+    renderer.domElement.style.height = '100%'
+    renderer.domElement.style.display = 'block'
+    container.appendChild(renderer.domElement)
+
+    // Sphere geometry with inward faces
+    const geometry = new THREE.SphereGeometry(500, 64, 32)
+    geometry.scale(-1, 1, 1)
+
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      side: THREE.FrontSide,
+    })
+
+    const mesh = new THREE.Mesh(geometry, material)
+    scene.add(mesh)
+
+    threeRefs.current.renderer = renderer
+    threeRefs.current.scene = scene
+    threeRefs.current.camera = camera
+    threeRefs.current.mesh = mesh
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const w = entry.contentRect.width
+        const h = entry.contentRect.height
+        if (w > 0 && h > 0) {
+          camera.aspect = w / h
+          camera.updateProjectionMatrix()
+          renderer.setSize(w, h, false)
+        }
+      }
+    })
+    resizeObserver.observe(container)
+
+    let animId: number
+    const animate = () => {
+      animId = requestAnimationFrame(animate)
+
+      if (Math.abs(camera.fov - fovRef.current) > 0.01) {
+        camera.fov = fovRef.current
+        camera.updateProjectionMatrix()
+      }
+
+      const lookTarget = sphericalToVector3(yawRef.current, pitchRef.current, 500)
+      camera.lookAt(lookTarget)
+
+      renderer.render(scene, camera)
+    }
+
+    animate()
+    threeRefs.current.animId = animId
+
+    return () => {
+      cancelAnimationFrame(animId)
+      resizeObserver.disconnect()
+
+      if (threeRefs.current.texture) {
+        threeRefs.current.texture.dispose()
+        threeRefs.current.texture = null
+      }
+      geometry.dispose()
+      material.dispose()
+      renderer.dispose()
+
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement)
+      }
+      threeRefs.current.renderer = null
+      threeRefs.current.scene = null
+      threeRefs.current.camera = null
+      threeRefs.current.mesh = null
+    }
+  }, [webglSupported])
+
+  // Load equirectangular texture (with procedural fallback)
   useEffect(() => {
     setImageLoaded(false)
     setLoadError(false)
 
-    const finalUrl = imageUrl && imageUrl.trim() !== '' ? imageUrl : null
+    let isCancelled = false
+    const textureLoader = new THREE.TextureLoader()
 
-    if (!finalUrl) {
-      // Use procedural equirectangular fallback
-      const fallbackDataUrl = generateProceduralPanorama(roomName || 'Ambiente')
-      const fallbackImg = new Image()
-      fallbackImg.onload = () => {
-        setImgElement(fallbackImg)
-        setImageLoaded(true)
+    const applyTexture = (texture: THREE.Texture) => {
+      if (isCancelled) {
+        texture.dispose()
+        return
       }
-      fallbackImg.src = fallbackDataUrl
+
+      texture.mapping = THREE.EquirectangularReflectionMapping
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.minFilter = THREE.LinearMipmapLinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.generateMipmaps = true
+
+      const mesh = threeRefs.current.mesh
+      if (mesh) {
+        if (threeRefs.current.texture) {
+          threeRefs.current.texture.dispose()
+        }
+        threeRefs.current.texture = texture
+        mesh.material.map = texture
+        mesh.material.needsUpdate = true
+      }
+      setImageLoaded(true)
+    }
+
+    const loadFallbackProcedural = () => {
+      const fallbackUrl = generateProceduralPanorama(roomName || 'Ambiente')
+      textureLoader.load(
+        fallbackUrl,
+        (fallbackTex) => {
+          applyTexture(fallbackTex)
+        },
+        undefined,
+        () => {
+          if (!isCancelled) setImageLoaded(true)
+        },
+      )
+    }
+
+    const finalUrl = imageUrl && imageUrl.trim() !== '' ? imageUrl : null
+    if (!finalUrl) {
+      loadFallbackProcedural()
       return
     }
 
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-
-    img.onload = () => {
-      setImgElement(img)
-      setImageLoaded(true)
-      setLoadError(false)
-    }
-
-    img.onerror = () => {
-      setLoadError(true)
-      const fallbackDataUrl = generateProceduralPanorama(roomName || 'Ambiente')
-      const fallbackImg = new Image()
-      fallbackImg.onload = () => {
-        setImgElement(fallbackImg)
-        setImageLoaded(true)
-      }
-      fallbackImg.src = fallbackDataUrl
-    }
-
-    img.src = finalUrl
+    textureLoader.load(
+      finalUrl,
+      (loadedTex) => {
+        applyTexture(loadedTex)
+        setLoadError(false)
+      },
+      undefined,
+      () => {
+        if (isCancelled) return
+        setLoadError(true)
+        loadFallbackProcedural()
+      },
+    )
 
     return () => {
-      img.onload = null
-      img.onerror = null
+      isCancelled = true
     }
   }, [imageUrl, roomName])
 
-  // Render loop using identical projection technique to PanoramaViewer
-  const render = useCallback(() => {
-    const canvas = canvasRef.current
-    const container = containerRef.current
-    if (!canvas || !container || !imgElement || !imageLoaded) return
-
-    const width = container.clientWidth
-    const height = container.clientHeight
-    if (width === 0 || height === 0) return
-
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width
-      canvas.height = height
-    }
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    const imgW = imgElement.naturalWidth || 2048
-    const imgH = imgElement.naturalHeight || 1024
-
-    const fov = fovRef.current
-    const yaw = yawRef.current
-    const pitch = pitchRef.current
-
-    const spanX = (fov / 360) * imgW * 1.35
-    const spanY = spanX * (height / width)
-
-    const centerX = (yaw / 360) * imgW
-    const centerY = (0.5 - pitch / 180) * imgH
-
-    const srcX = centerX - spanX / 2
-    const srcY = Math.max(0, Math.min(imgH - spanY, centerY - spanY / 2))
-
-    ctx.clearRect(0, 0, width, height)
-
-    // Seamless equirectangular horizontal wrapping
-    if (srcX < 0) {
-      const part1W = -srcX
-      const drawPart1W = (part1W / spanX) * width
-      ctx.drawImage(imgElement, imgW + srcX, srcY, part1W, spanY, 0, 0, drawPart1W, height)
-      ctx.drawImage(
-        imgElement,
-        0,
-        srcY,
-        spanX - part1W,
-        spanY,
-        drawPart1W,
-        0,
-        width - drawPart1W,
-        height,
-      )
-    } else if (srcX + spanX > imgW) {
-      const part1W = imgW - srcX
-      const drawPart1W = (part1W / spanX) * width
-      ctx.drawImage(imgElement, srcX, srcY, part1W, spanY, 0, 0, drawPart1W, height)
-      ctx.drawImage(
-        imgElement,
-        0,
-        srcY,
-        spanX - part1W,
-        spanY,
-        drawPart1W,
-        0,
-        width - drawPart1W,
-        height,
-      )
-    } else {
-      ctx.drawImage(imgElement, srcX, srcY, spanX, spanY, 0, 0, width, height)
-    }
-  }, [imgElement, imageLoaded])
-
-  useEffect(() => {
-    let animId: number
-    const loop = () => {
-      render()
-      animId = requestAnimationFrame(loop)
-    }
-    animId = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(animId)
-  }, [render])
-
-  // Drag handlers with pointer events (mouse + touch + pinch)
+  // Pointer event handlers (drag, pan, pinch)
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    // Ignore clicks on control overlay buttons
     if ((e.target as HTMLElement).closest('.no-pan')) return
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
 
@@ -218,7 +285,7 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
       if (initialPinchDistRef.current > 0) {
         const scale = currentDist / initialPinchDistRef.current
         const newFov = initialPinchFovRef.current / scale
-        fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, newFov))
+        fovRef.current = Math.max(MIN_PANORAMA_FOV, Math.min(MAX_PANORAMA_FOV, newFov))
       }
       return
     }
@@ -228,7 +295,7 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
     const dx = e.clientX - lastMousePosRef.current.x
     const dy = e.clientY - lastMousePosRef.current.y
 
-    const sensitivity = (fovRef.current / 95) * 0.28
+    const sensitivity = (fovRef.current / 80) * 0.22
     const deltaYaw = dx * sensitivity
     const deltaPitch = dy * sensitivity * 0.55
 
@@ -271,7 +338,10 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault()
     const zoomDelta = e.deltaY > 0 ? 5 : -5
-    fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, fovRef.current + zoomDelta))
+    fovRef.current = Math.max(
+      MIN_PANORAMA_FOV,
+      Math.min(MAX_PANORAMA_FOV, fovRef.current + zoomDelta),
+    )
   }
 
   const rotateBy = (degDelta: number) => {
@@ -281,7 +351,10 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
   }
 
   const zoomBy = (fovDelta: number) => {
-    fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, fovRef.current + fovDelta))
+    fovRef.current = Math.max(
+      MIN_PANORAMA_FOV,
+      Math.min(MAX_PANORAMA_FOV, fovRef.current + fovDelta),
+    )
   }
 
   const getCardinalName = (deg: number) => {
@@ -302,7 +375,7 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
     <div className="space-y-2">
       {/* Viewer Container */}
       <div
-        ref={containerRef}
+        ref={mountRef}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -311,19 +384,17 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
         className="relative w-full h-[280px] sm:h-[300px] rounded-2xl overflow-hidden bg-black select-none cursor-grab active:cursor-grabbing border-2 border-[#1F4E5F]/30 shadow-inner group"
         style={{ touchAction: 'none' }}
       >
-        <canvas ref={canvasRef} className="w-full h-full block" />
-
         {/* Loading overlay */}
         {!imageLoaded && (
-          <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center text-white z-20">
+          <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center text-white z-20 pointer-events-none">
             <div className="w-8 h-8 border-3 border-white/20 border-t-[#E07A3F] rounded-full animate-spin mb-2" />
-            <p className="text-xs font-semibold">Carregando panorama de origem...</p>
+            <p className="text-xs font-semibold">Carregando panorama de origem em 360°...</p>
           </div>
         )}
 
         {/* Notice badge if fallback was used */}
         {loadError && (
-          <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 bg-amber-500/90 text-white text-[10px] font-medium px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs">
+          <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 bg-amber-500/90 text-white text-[10px] font-medium px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs pointer-events-none">
             <Info className="w-3 h-3 flex-shrink-0" />
             <span>Usando simulação 360° (imagem não encontrada)</span>
           </div>
@@ -414,7 +485,7 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
         <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-between pointer-events-none">
           <div className="bg-black/75 backdrop-blur-md text-white text-[11px] px-2.5 py-1 rounded-lg border border-white/10 flex items-center gap-1.5 shadow">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span>Arraste o panorama até a mira apontar para o destino</span>
+            <span>Arraste o panorama esférico até a mira apontar para o destino</span>
           </div>
 
           {/* Quick viewer controls on the bottom-right */}

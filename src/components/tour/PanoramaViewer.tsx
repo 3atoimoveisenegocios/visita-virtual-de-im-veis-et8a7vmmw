@@ -1,5 +1,14 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import * as THREE from 'three'
 import { generateProceduralPanorama } from '@/lib/panorama-assets'
+import {
+  DEFAULT_PANORAMA_FOV,
+  MIN_PANORAMA_FOV,
+  MAX_PANORAMA_FOV,
+  isWebGLAvailable,
+  projectSphericalToScreen,
+  sphericalToVector3,
+} from '@/lib/panorama-spherical'
 import type { Hotspot } from '@/types'
 import { ChevronRight, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 
@@ -12,6 +21,13 @@ interface PanoramaViewerProps {
   isLoading?: boolean
 }
 
+interface VisibleHotspotItem {
+  hotspot: Hotspot
+  x: number
+  y: number
+  visible: boolean
+}
+
 export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   imageUrl,
   roomName,
@@ -20,207 +36,282 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   onHotspotClick,
   isLoading = false,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const mountRef = useRef<HTMLDivElement>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
-  const [imgElement, setImgElement] = useState<HTMLImageElement | null>(null)
+  const [webglSupported, setWebglSupported] = useState(true)
 
-  // View state (spherical angles in degrees)
-  // FOV limits: 45° (max zoom-in) up to 135° (wide zoom-out). Default open FOV: 95°.
-  const DEFAULT_FOV = 95
-  const MIN_FOV = 45
-  const MAX_FOV = 135
+  // Spherical camera orientation & FOV state
+  // yaw: 0..360, pitch: -85..85 (degrees)
+  // FOV limits: 45° (zoomed-in) to 110° (wide angle, prevents pole/nadir distortion). Initial: 80°.
+  const yawRef = useRef<number>(0)
+  const pitchRef = useRef<number>(0)
+  const fovRef = useRef<number>(DEFAULT_PANORAMA_FOV)
 
-  const yawRef = useRef<number>(0) // 0..360 horizontal
-  const pitchRef = useRef<number>(0) // -85..85 vertical
-  const fovRef = useRef<number>(DEFAULT_FOV) // Field of view (higher = zoomed out / wider angle)
-
-  // Drag interaction and touch pinch state
+  // Drag interaction, inertia and touch pinch state
   const isDraggingRef = useRef<boolean>(false)
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const velocityRef = useRef<{ vx: number; vy: number }>({ vx: 0, vy: 0 })
   const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map())
   const initialPinchDistRef = useRef<number | null>(null)
-  const initialPinchFovRef = useRef<number>(DEFAULT_FOV)
-  const [visibleHotspots, setVisibleHotspots] = useState<
-    Array<{
-      hotspot: Hotspot
-      x: number
-      y: number
-      visible: boolean
-    }>
-  >([])
+  const initialPinchFovRef = useRef<number>(DEFAULT_PANORAMA_FOV)
 
-  // On image/point change: keep an open wide-angle FOV so transitions don't abruptly zoom in
+  // Hotspots projected in 2D coordinates
+  const [visibleHotspots, setVisibleHotspots] = useState<VisibleHotspotItem[]>([])
+
+  // Three.js instances ref
+  const threeRefs = useRef<{
+    renderer: THREE.WebGLRenderer | null
+    scene: THREE.Scene | null
+    camera: THREE.PerspectiveCamera | null
+    mesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial> | null
+    texture: THREE.Texture | null
+    animId: number | null
+  }>({
+    renderer: null,
+    scene: null,
+    camera: null,
+    mesh: null,
+    texture: null,
+    animId: null,
+  })
+
+  // On image or point change: keep an open wide-angle FOV so transitions don't abruptly zoom in
   useEffect(() => {
-    // If the user was zoomed into a detail (< DEFAULT_FOV), reset to the open DEFAULT_FOV
-    // so moving into a new room or point provides a full panoramic overview
-    if (fovRef.current < DEFAULT_FOV) {
-      fovRef.current = DEFAULT_FOV
+    if (fovRef.current < DEFAULT_PANORAMA_FOV) {
+      fovRef.current = DEFAULT_PANORAMA_FOV
     }
   }, [imageUrl])
 
-  // Load image with fallback
+  // Initial WebGL capability check
+  useEffect(() => {
+    setWebglSupported(isWebGLAvailable())
+  }, [])
+
+  // Initialize Three.js scene, camera, sphere and render loop
+  useEffect(() => {
+    const container = mountRef.current
+    if (!container || !webglSupported) return
+
+    const width = container.clientWidth || 800
+    const height = container.clientHeight || 600
+
+    const scene = new THREE.Scene()
+
+    const camera = new THREE.PerspectiveCamera(fovRef.current, width / height, 0.1, 1500)
+    camera.position.set(0, 0, 0)
+
+    let renderer: THREE.WebGLRenderer
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: false,
+        powerPreference: 'high-performance',
+      })
+    } catch {
+      setWebglSupported(false)
+      return
+    }
+
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    renderer.setSize(width, height)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.domElement.style.width = '100%'
+    renderer.domElement.style.height = '100%'
+    renderer.domElement.style.display = 'block'
+    container.appendChild(renderer.domElement)
+
+    // Sphere geometry with inward faces:
+    // radius: 500, widthSegments: 64, heightSegments: 32
+    // scale(-1, 1, 1) inverts normals so the equirectangular panorama texture is mapped inside the sphere
+    const geometry = new THREE.SphereGeometry(500, 64, 32)
+    geometry.scale(-1, 1, 1)
+
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      side: THREE.FrontSide,
+    })
+
+    const mesh = new THREE.Mesh(geometry, material)
+    scene.add(mesh)
+
+    threeRefs.current.renderer = renderer
+    threeRefs.current.scene = scene
+    threeRefs.current.camera = camera
+    threeRefs.current.mesh = mesh
+
+    // Resize observer to keep aspect ratio and renderer pixel dimensions crisp
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const w = entry.contentRect.width
+        const h = entry.contentRect.height
+        if (w > 0 && h > 0) {
+          camera.aspect = w / h
+          camera.updateProjectionMatrix()
+          renderer.setSize(w, h, false)
+        }
+      }
+    })
+    resizeObserver.observe(container)
+
+    // Main render & update loop
+    let animId: number
+    const animate = () => {
+      animId = requestAnimationFrame(animate)
+
+      // Apply drag inertia when not interacting
+      if (!isDraggingRef.current) {
+        yawRef.current = (yawRef.current - velocityRef.current.vx + 360) % 360
+        pitchRef.current = Math.max(-85, Math.min(85, pitchRef.current + velocityRef.current.vy))
+        velocityRef.current.vx *= 0.92
+        velocityRef.current.vy *= 0.92
+        if (Math.abs(velocityRef.current.vx) < 0.001) velocityRef.current.vx = 0
+        if (Math.abs(velocityRef.current.vy) < 0.001) velocityRef.current.vy = 0
+      }
+
+      // Update camera FOV smoothly
+      if (Math.abs(camera.fov - fovRef.current) > 0.01) {
+        camera.fov = fovRef.current
+        camera.updateProjectionMatrix()
+      }
+
+      // Point camera according to yaw & pitch
+      const lookTarget = sphericalToVector3(yawRef.current, pitchRef.current, 500)
+      camera.lookAt(lookTarget)
+
+      renderer.render(scene, camera)
+
+      // Calculate mathematically accurate 2D screen projections for hotspots on the sphere
+      if (container.clientWidth > 0 && container.clientHeight > 0) {
+        const curW = container.clientWidth
+        const curH = container.clientHeight
+        const activeHotspots = (mesh.userData.hotspots as Hotspot[]) || []
+
+        const projectedList: VisibleHotspotItem[] = activeHotspots.map((hs) => {
+          // Standard real estate hotspots are located at floor/mid height level
+          // Direction is horizontal yaw (0..360). For step markers, pitch is slightly down (~ -16°);
+          // for door/room exits, pitch is around horizontal horizon (~ -4°).
+          const isStep =
+            hs.type === 'step' || (hs.room === hs.target_room && Boolean(hs.target_nav_point))
+          const hsPitch = isStep ? -16 : -4
+
+          const proj = projectSphericalToScreen(hs.direction, hsPitch, camera, curW, curH, 500)
+
+          return {
+            hotspot: hs,
+            x: proj.x,
+            y: proj.y,
+            visible: proj.visible,
+          }
+        })
+
+        setVisibleHotspots(projectedList)
+      }
+    }
+
+    animate()
+    threeRefs.current.animId = animId
+
+    return () => {
+      cancelAnimationFrame(animId)
+      resizeObserver.disconnect()
+
+      if (threeRefs.current.texture) {
+        threeRefs.current.texture.dispose()
+        threeRefs.current.texture = null
+      }
+      geometry.dispose()
+      material.dispose()
+      renderer.dispose()
+
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement)
+      }
+      threeRefs.current.renderer = null
+      threeRefs.current.scene = null
+      threeRefs.current.camera = null
+      threeRefs.current.mesh = null
+    }
+  }, [webglSupported])
+
+  // Keep hotspots in sync with the Three.js mesh userData
+  useEffect(() => {
+    if (threeRefs.current.mesh) {
+      threeRefs.current.mesh.userData.hotspots = hotspots
+    }
+  }, [hotspots])
+
+  // Load and apply Equirectangular 2:1 panorama texture
   useEffect(() => {
     setImageLoaded(false)
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
 
-    img.onload = () => {
-      setImgElement(img)
+    let isCancelled = false
+    const textureLoader = new THREE.TextureLoader()
+
+    const applyTexture = (texture: THREE.Texture) => {
+      if (isCancelled) {
+        texture.dispose()
+        return
+      }
+
+      texture.mapping = THREE.EquirectangularReflectionMapping
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.minFilter = THREE.LinearMipmapLinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.generateMipmaps = true
+
+      const mesh = threeRefs.current.mesh
+      if (mesh) {
+        if (threeRefs.current.texture) {
+          threeRefs.current.texture.dispose()
+        }
+        threeRefs.current.texture = texture
+        mesh.material.map = texture
+        mesh.material.needsUpdate = true
+      }
       setImageLoaded(true)
     }
 
-    img.onerror = () => {
-      // Fallback: build procedural equirectangular panorama canvas
-      const fallbackDataUrl = generateProceduralPanorama(roomName)
-      const fallbackImg = new Image()
-      fallbackImg.onload = () => {
-        setImgElement(fallbackImg)
-        setImageLoaded(true)
-      }
-      fallbackImg.src = fallbackDataUrl
+    const loadFallbackProcedural = () => {
+      const fallbackUrl = generateProceduralPanorama(roomName)
+      textureLoader.load(
+        fallbackUrl,
+        (fallbackTex) => {
+          applyTexture(fallbackTex)
+        },
+        undefined,
+        () => {
+          if (!isCancelled) setImageLoaded(true)
+        },
+      )
     }
 
-    img.src = imageUrl
+    // Try loading source panorama
+    textureLoader.load(
+      imageUrl,
+      (loadedTex) => {
+        applyTexture(loadedTex)
+      },
+      undefined,
+      () => {
+        if (isCancelled) return
+        loadFallbackProcedural()
+      },
+    )
 
     return () => {
-      img.onload = null
-      img.onerror = null
+      isCancelled = true
     }
   }, [imageUrl, roomName])
 
-  // Main WebGL / Canvas 2D Equirectangular projection renderer
-  const render = useCallback(() => {
-    const canvas = canvasRef.current
-    const container = containerRef.current
-    if (!canvas || !container || !imgElement || !imageLoaded) return
-
-    const width = container.clientWidth
-    const height = container.clientHeight
-
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width
-      canvas.height = height
-    }
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    // Apply inertia damping
-    if (!isDraggingRef.current) {
-      yawRef.current = (yawRef.current - velocityRef.current.vx + 360) % 360
-      pitchRef.current = Math.max(-85, Math.min(85, pitchRef.current + velocityRef.current.vy))
-      velocityRef.current.vx *= 0.92
-      velocityRef.current.vy *= 0.92
-      if (Math.abs(velocityRef.current.vx) < 0.001) velocityRef.current.vx = 0
-      if (Math.abs(velocityRef.current.vy) < 0.001) velocityRef.current.vy = 0
-    }
-
-    // Equirectangular slice rendering for ultra smooth 60fps pan/zoom
-    const imgW = imgElement.naturalWidth || 2048
-    const imgH = imgElement.naturalHeight || 1024
-
-    const fov = fovRef.current
-    const yaw = yawRef.current
-    const pitch = pitchRef.current
-
-    // Map yaw & pitch to image coordinates
-    // yaw: 0-360 mapped to imgW
-    // fov determines horizontal span
-    const spanX = (fov / 360) * imgW * 1.35
-    const spanY = spanX * (height / width)
-
-    const centerX = (yaw / 360) * imgW
-    const centerY = (0.5 - pitch / 180) * imgH
-
-    const srcX = centerX - spanX / 2
-    const srcY = Math.max(0, Math.min(imgH - spanY, centerY - spanY / 2))
-
-    ctx.clearRect(0, 0, width, height)
-
-    // Handle horizontal wrap-around seamlessly
-    if (srcX < 0) {
-      const part1W = -srcX
-      const drawPart1W = (part1W / spanX) * width
-      ctx.drawImage(imgElement, imgW + srcX, srcY, part1W, spanY, 0, 0, drawPart1W, height)
-      ctx.drawImage(
-        imgElement,
-        0,
-        srcY,
-        spanX - part1W,
-        spanY,
-        drawPart1W,
-        0,
-        width - drawPart1W,
-        height,
-      )
-    } else if (srcX + spanX > imgW) {
-      const part1W = imgW - srcX
-      const drawPart1W = (part1W / spanX) * width
-      ctx.drawImage(imgElement, srcX, srcY, part1W, spanY, 0, 0, drawPart1W, height)
-      ctx.drawImage(
-        imgElement,
-        0,
-        srcY,
-        spanX - part1W,
-        spanY,
-        drawPart1W,
-        0,
-        width - drawPart1W,
-        height,
-      )
-    } else {
-      ctx.drawImage(imgElement, srcX, srcY, spanX, spanY, 0, 0, width, height)
-    }
-
-    // Calculate screen positions of hotspots based on current yaw/pitch/fov
-    const newHotspotPositions = hotspots.map((hs) => {
-      // hs.direction is 0..360 (compass direction)
-      let diff = hs.direction - yaw
-      // normalize to -180..180
-      while (diff < -180) diff += 360
-      while (diff > 180) diff -= 360
-
-      const halfFov = (fov / 2) * 1.35
-      const isVisible = Math.abs(diff) <= halfFov
-
-      // Project onto canvas width
-      const screenX = (0.5 + diff / (halfFov * 2)) * width
-      // Slight vertical placement depending on pitch (ground/door level ~ 60% down)
-      const baseVertical = 0.58
-      const pitchOffset = (pitch / 90) * 0.45
-      const screenY = (baseVertical + pitchOffset) * height
-
-      return {
-        hotspot: hs,
-        x: screenX,
-        y: Math.max(80, Math.min(height - 100, screenY)),
-        visible: isVisible,
-      }
-    })
-
-    setVisibleHotspots(newHotspotPositions)
-  }, [imgElement, imageLoaded, hotspots])
-
-  // Animation frame loop
-  useEffect(() => {
-    let animId: number
-    const loop = () => {
-      render()
-      animId = requestAnimationFrame(loop)
-    }
-    animId = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(animId)
-  }, [render])
-
-  // Pointer event handlers (Mouse, Touch, and Pinch-to-zoom)
+  // Pointer event handlers (Mouse drag, Touch pan, Pinch-to-zoom)
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (
       (e.target as HTMLElement).closest('.interactive-hotspot') ||
       (e.target as HTMLElement).closest('.no-pan')
-    )
+    ) {
       return
+    }
+
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
 
     if (activePointersRef.current.size === 1) {
@@ -247,16 +338,14 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     if (!activePointersRef.current.has(e.pointerId)) return
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
 
-    // Pinch-to-zoom with 2 fingers
+    // Pinch-to-zoom with 2 fingers on mobile
     if (activePointersRef.current.size === 2 && initialPinchDistRef.current !== null) {
       const pts = Array.from(activePointersRef.current.values())
       const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
       if (initialPinchDistRef.current > 0) {
         const scale = currentDist / initialPinchDistRef.current
-        // Spreading fingers (scale > 1) = zoom in (smaller FOV)
-        // Pinching fingers (scale < 1) = zoom out (larger FOV)
         const newFov = initialPinchFovRef.current / scale
-        fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, newFov))
+        fovRef.current = Math.max(MIN_PANORAMA_FOV, Math.min(MAX_PANORAMA_FOV, newFov))
       }
       return
     }
@@ -266,14 +355,15 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     const dx = e.clientX - lastMousePosRef.current.x
     const dy = e.clientY - lastMousePosRef.current.y
 
-    const sensitivity = (fovRef.current / 95) * 0.28
+    // Adaptive sensitivity: lower FOV (zoomed-in) moves slower and more accurately
+    const sensitivity = (fovRef.current / 80) * 0.22
     const deltaYaw = dx * sensitivity
-    const deltaPitch = dy * sensitivity * 0.7
+    const deltaPitch = dy * sensitivity * 0.65
 
     yawRef.current = (yawRef.current - deltaYaw + 360) % 360
     pitchRef.current = Math.max(-85, Math.min(85, pitchRef.current + deltaPitch))
 
-    velocityRef.current = { vx: deltaYaw * 0.4, vy: deltaPitch * 0.4 }
+    velocityRef.current = { vx: deltaYaw * 0.35, vy: deltaPitch * 0.35 }
     lastMousePosRef.current = { x: e.clientX, y: e.clientY }
   }
 
@@ -284,7 +374,6 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     }
 
     if (activePointersRef.current.size === 1) {
-      // Switch back to single finger drag
       const remainingPt = Array.from(activePointersRef.current.values())[0]
       lastMousePosRef.current = { x: remainingPt.x, y: remainingPt.y }
       isDraggingRef.current = true
@@ -295,37 +384,40 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     try {
       ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
     } catch {
-      /* intentionally ignored */
+      /* ignore */
     }
   }
 
-  // Mouse wheel zoom: deltaY > 0 is scroll down (zoom out = increase FOV), deltaY < 0 is scroll up (zoom in = decrease FOV)
+  // Wheel zoom
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault()
     const zoomDelta = e.deltaY > 0 ? 5 : -5
-    fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, fovRef.current + zoomDelta))
+    fovRef.current = Math.max(
+      MIN_PANORAMA_FOV,
+      Math.min(MAX_PANORAMA_FOV, fovRef.current + zoomDelta),
+    )
   }
 
-  // Zoom control buttons
+  // Floating zoom & reset controls
   const zoomIn = (e?: React.MouseEvent) => {
     e?.stopPropagation()
-    fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, fovRef.current - 12))
+    fovRef.current = Math.max(MIN_PANORAMA_FOV, Math.min(MAX_PANORAMA_FOV, fovRef.current - 10))
   }
 
   const zoomOut = (e?: React.MouseEvent) => {
     e?.stopPropagation()
-    fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, fovRef.current + 12))
+    fovRef.current = Math.max(MIN_PANORAMA_FOV, Math.min(MAX_PANORAMA_FOV, fovRef.current + 10))
   }
 
   const resetView = (e?: React.MouseEvent) => {
     e?.stopPropagation()
-    fovRef.current = DEFAULT_FOV
+    fovRef.current = DEFAULT_PANORAMA_FOV
     pitchRef.current = 0
   }
 
   return (
     <div
-      ref={containerRef}
+      ref={mountRef}
       className="relative w-full h-full overflow-hidden select-none cursor-grab active:cursor-grabbing bg-black"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -334,8 +426,6 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       onWheel={handleWheel}
       style={{ touchAction: 'none' }}
     >
-      <canvas ref={canvasRef} className="w-full h-full block" />
-
       {/* Floating On-Screen Zoom & Reset Controls */}
       <div className="absolute right-4 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-2 no-pan pointer-events-auto">
         <button
@@ -369,23 +459,39 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
       {/* Loading overlay */}
       {(isLoading || !imageLoaded) && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20 pointer-events-none">
           <div className="w-12 h-12 border-4 border-white/20 border-t-[#E07A3F] rounded-full animate-spin mb-4" />
-          <p className="text-sm font-medium tracking-wide">Carregando visualização 360°...</p>
+          <p className="text-sm font-medium tracking-wide">
+            Carregando visualização 360° esférica...
+          </p>
           <span className="text-xs text-white/60 mt-1">
             {roomName} {pointName ? `• ${pointName}` : ''}
           </span>
         </div>
       )}
 
-      {/* Interactive Navigation Hotspots rendered on top */}
+      {/* Fallback notification if WebGL is unavailable on old devices */}
+      {!webglSupported && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/90 text-white p-6 z-30">
+          <div className="text-center max-w-md">
+            <h3 className="text-lg font-bold mb-2">Aceleração WebGL não disponível</h3>
+            <p className="text-xs text-white/70">
+              Para visualizar o tour 360° com projeção esférica real, utilize um navegador moderno
+              com aceleração de hardware ativada.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Navigation Hotspots mathematically projected onto the sphere */}
       {imageLoaded &&
         visibleHotspots
           .filter((item) => item.visible)
           .map((item) => {
             const isStep =
               item.hotspot.type === 'step' ||
-              (item.hotspot.room === item.hotspot.target_room && !!item.hotspot.target_nav_point)
+              (item.hotspot.room === item.hotspot.target_room &&
+                Boolean(item.hotspot.target_nav_point))
             const targetPointName = item.hotspot.expand?.target_nav_point?.name
             const targetRoomName = item.hotspot.expand?.target_room?.name
             const label =
@@ -408,13 +514,12 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
                 }}
               >
                 {isStep ? (
-                  /* Street View style displacement arrow / disc indicator */
+                  /* Street View style displacement arrow / floor disc */
                   <div className="relative flex flex-col items-center justify-center">
                     {/* Perspective floor disc */}
                     <div className="relative w-16 h-12 flex items-center justify-center">
                       <div className="absolute w-16 h-8 rounded-[100%] bg-white/25 border-2 border-white shadow-[0_0_15px_rgba(255,255,255,0.6)] animate-pulse pointer-events-none transition-transform group-hover:scale-110 group-hover:bg-[#E07A3F]/40 group-hover:border-[#E07A3F]" />
                       <div className="relative z-10 w-9 h-9 rounded-full bg-[#E07A3F] text-white flex items-center justify-center shadow-xl border-2 border-white group-hover:scale-110 transition-transform">
-                        {/* Up arrow / chevron forward indicator */}
                         <svg
                           className="w-5 h-5 text-white transition-transform group-hover:-translate-y-0.5"
                           viewBox="0 0 24 24"
