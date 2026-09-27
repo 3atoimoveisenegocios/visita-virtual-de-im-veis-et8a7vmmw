@@ -12,7 +12,7 @@ import {
   sphericalToVector3,
 } from '@/lib/panorama-spherical'
 import type { Hotspot } from '@/types'
-import { ChevronRight, ZoomIn, ZoomOut, RotateCcw, Smartphone } from 'lucide-react'
+import { ChevronRight, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 
 interface PanoramaViewerProps {
   imageUrl: string
@@ -87,14 +87,6 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     duration: 600,
   })
 
-  // Gyroscope / DeviceOrientation state (mobile optional, off by default)
-  const [gyroActive, setGyroActive] = useState<boolean>(false)
-  const [hasGyroSupport, setHasGyroSupport] = useState<boolean>(false)
-  const gyroActiveRef = useRef<boolean>(false)
-  const gyroBaseRef = useRef<{ alpha: number; beta: number; gamma: number } | null>(null)
-  const gyroYawOffsetRef = useRef<number>(0)
-  const gyroPitchOffsetRef = useRef<number>(0)
-
   // Drag interaction, inertia and touch pinch state
   const isDraggingRef = useRef<boolean>(false)
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
@@ -124,20 +116,6 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     texture: null,
     animId: null,
   })
-
-  // Detect gyroscope availability on device (mobile / touch devices)
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'DeviceOrientationEvent' in window) {
-      // Show gyro button only on devices with touch / coarse pointer support or orientation support
-      const isTouchDevice =
-        'ontouchstart' in window ||
-        navigator.maxTouchPoints > 0 ||
-        window.matchMedia('(pointer: coarse)').matches
-      if (isTouchDevice) {
-        setHasGyroSupport(true)
-      }
-    }
-  }, [])
 
   // On image, room or point change: initialize yaw and pitch smoothly with Matterport-style gentle turn
   useEffect(() => {
@@ -514,14 +492,6 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       Math.min(MAX_PITCH_DEG, pitchRef.current + deltaPitch),
     )
 
-    // If gyroscope is currently active during touch drag, re-anchor offset to current yaw & pitch
-    // so when touch releases, gyro doesn't snap back to previous reference angle
-    if (gyroActiveRef.current) {
-      gyroYawOffsetRef.current = yawRef.current
-      gyroPitchOffsetRef.current = pitchRef.current
-      gyroBaseRef.current = null
-    }
-
     // Gentle velocity recording for natural deceleration
     velocityRef.current = { vx: deltaYaw * 0.28, vy: deltaPitch * 0.28 }
     lastMousePosRef.current = { x: e.clientX, y: e.clientY }
@@ -620,86 +590,6 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     }
   }
 
-  // DeviceOrientation event listener
-  const handleDeviceOrientation = useCallback((event: DeviceOrientationEvent) => {
-    if (!gyroActiveRef.current) return
-    if (event.alpha === null || event.beta === null || event.gamma === null) return
-
-    if (!gyroBaseRef.current) {
-      gyroBaseRef.current = {
-        alpha: event.alpha,
-        beta: event.beta,
-        gamma: event.gamma,
-      }
-      return
-    }
-
-    // Alpha: rotation around Z axis (compass heading 0..360)
-    // Beta: front-to-back tilt (-180..180)
-    const deltaAlpha = event.alpha - gyroBaseRef.current.alpha
-    const deltaBeta = event.beta - gyroBaseRef.current.beta
-
-    // Smooth update of yaw and pitch from device orientation when not dragging
-    if (!isDraggingRef.current) {
-      yawRef.current = (gyroYawOffsetRef.current - deltaAlpha + 360) % 360
-      const newPitch = gyroPitchOffsetRef.current + (deltaBeta - 45) // 45° natural phone holding angle
-      pitchRef.current = Math.max(MIN_PITCH_DEG, Math.min(MAX_PITCH_DEG, newPitch))
-    }
-  }, [])
-
-  // Toggle optional Gyroscope with iOS permission request
-  const toggleGyroscope = useCallback(
-    async (e?: React.MouseEvent) => {
-      e?.stopPropagation()
-
-      // If already active, turn it OFF cleanly
-      if (gyroActiveRef.current) {
-        gyroActiveRef.current = false
-        setGyroActive(false)
-        gyroBaseRef.current = null
-        // Reset inertia velocity so drag resumes smoothly without sudden glide
-        velocityRef.current = { vx: 0, vy: 0 }
-        window.removeEventListener('deviceorientation', handleDeviceOrientation, true)
-        return
-      }
-
-      // iOS 13+ DeviceOrientationEvent permission request
-      const doe = DeviceOrientationEvent as unknown as {
-        requestPermission?: () => Promise<'granted' | 'denied'>
-      }
-      if (typeof doe.requestPermission === 'function') {
-        try {
-          const response = await doe.requestPermission()
-          if (response !== 'granted') {
-            return
-          }
-        } catch (err) {
-          console.warn('Permissão de giroscópio negada ou não suportada:', err)
-          return
-        }
-      }
-
-      // Capture current camera orientation as the anchor baseline so there is no jump
-      gyroBaseRef.current = null
-      gyroYawOffsetRef.current = yawRef.current
-      gyroPitchOffsetRef.current = pitchRef.current
-      gyroActiveRef.current = true
-      setGyroActive(true)
-
-      // Remove any existing listener before attaching to avoid duplicate handlers
-      window.removeEventListener('deviceorientation', handleDeviceOrientation, true)
-      window.addEventListener('deviceorientation', handleDeviceOrientation, true)
-    },
-    [handleDeviceOrientation],
-  )
-
-  useEffect(() => {
-    return () => {
-      gyroActiveRef.current = false
-      window.removeEventListener('deviceorientation', handleDeviceOrientation, true)
-    }
-  }, [handleDeviceOrientation])
-
   return (
     <div
       ref={mountRef}
@@ -711,7 +601,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       onWheel={handleWheel}
       style={{ touchAction: 'none' }}
     >
-      {/* Floating On-Screen Controls: Clean, discreet vertical stack (Zoom, Reset, Gyroscope) */}
+      {/* Floating On-Screen Controls: Clean, discreet vertical stack (Zoom, Reset) */}
       <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-1.5 no-pan pointer-events-auto">
         <button
           type="button"
@@ -740,23 +630,6 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         >
           <RotateCcw className="w-3.5 h-3.5" />
         </button>
-
-        {/* Gyroscope toggle (optional on mobile/touch, never default) */}
-        {hasGyroSupport && (
-          <button
-            type="button"
-            onClick={toggleGyroscope}
-            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full backdrop-blur-md border flex items-center justify-center shadow-md transition-all active:scale-95 ${
-              gyroActive
-                ? 'bg-[#E07A3F] border-white text-white'
-                : 'bg-black/60 hover:bg-black/85 border-white/10 text-white/80'
-            }`}
-            title={gyroActive ? 'Desativar giroscópio' : 'Ativar giroscópio (mover celular)'}
-            aria-label="Controle por giroscópio"
-          >
-            <Smartphone className="w-3.5 h-3.5" />
-          </button>
-        )}
       </div>
 
       {/* Loading overlay */}
