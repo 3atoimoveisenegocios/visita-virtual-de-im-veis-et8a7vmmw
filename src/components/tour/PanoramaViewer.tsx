@@ -440,7 +440,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     const dy = e.clientY - lastMousePosRef.current.y
 
     // Adaptive sensitivity: lower FOV (zoomed-in) moves slower and more accurately
-    const sensitivity = (fovRef.current / 75) * 0.22
+    const sensitivity = (fovRef.current / DEFAULT_PANORAMA_FOV) * 0.22
     const deltaYaw = dx * sensitivity
     const deltaPitch = dy * sensitivity * 0.65
 
@@ -502,7 +502,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     // Google Street View behavior: two-finger touchpad or mouse wheel rotates view
     // deltaX rotates yaw (horizontal pan)
     // deltaY tilts pitch (vertical tilt)
-    const factor = (fovRef.current / 75) * 0.12
+    const factor = (fovRef.current / DEFAULT_PANORAMA_FOV) * 0.12
     const deltaYaw = e.deltaX * factor
     const deltaPitch = -e.deltaY * factor * 0.65
 

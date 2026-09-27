@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-export const DEFAULT_PANORAMA_FOV = 75
+export const DEFAULT_PANORAMA_FOV = 80
 export const MIN_PANORAMA_FOV = 45
 export const MAX_PANORAMA_FOV = 110
 

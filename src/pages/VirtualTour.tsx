@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react'
-import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { propertiesService } from '@/services/properties'
 import { roomsService } from '@/services/rooms'
 import { hotspotsService } from '@/services/hotspots'
@@ -24,19 +24,21 @@ import {
   Map,
   Info,
   MessageCircle,
-  X,
   Maximize2,
+  Minimize2,
   Share2,
   Footprints,
-  ChevronRight,
-  Navigation,
+  Eye,
+  Building2,
+  MapPin,
+  Sparkles,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 
 export default function VirtualTour() {
   const { id } = useParams<{ id: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
-  const navigate = useNavigate()
 
   const [property, setProperty] = useState<Property | null>(null)
   const [rooms, setRooms] = useState<Room[]>([])
@@ -46,14 +48,51 @@ export default function VirtualTour() {
   const [roomPoints, setRoomPoints] = useState<NavPoint[]>([])
   const [currentHotspots, setCurrentHotspots] = useState<Hotspot[]>([])
 
-  // Panels state
+  // Panels & Fullscreen state
   const [floorPlanOpen, setFloorPlanOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const frameContainerRef = useRef<HTMLDivElement>(null)
 
   // Transition state: fade-to-black 300ms
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [transitionMsg, setTransitionMsg] = useState('Navegando...')
   const [loading, setLoading] = useState(true)
+
+  // Synchronize fullscreen change events (browser ESC or Fullscreen API)
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const activeEl = document.fullscreenElement
+      setIsFullscreen(Boolean(activeEl && frameContainerRef.current?.contains(activeEl)))
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
+
+  // Toggle true DOM fullscreen on the showcase frame container
+  const toggleFullscreen = useCallback(async () => {
+    const elem = frameContainerRef.current
+    if (!elem) return
+
+    try {
+      if (!document.fullscreenElement) {
+        if (elem.requestFullscreen) {
+          await elem.requestFullscreen()
+        }
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen()
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao alternar modo tela cheia:', err)
+      // Fallback: toggle internal state
+      setIsFullscreen((prev) => !prev)
+    }
+  }, [])
 
   // Initial load
   useEffect(() => {
@@ -100,7 +139,6 @@ export default function VirtualTour() {
 
           // Fetch hotspots
           const hs = await hotspotsService.getHotspotsByRoom(initialRoom.id)
-          // Filter hotspots for current point if point exists
           if (initialPoint) {
             const pointHs = hs.filter((h) => !h.nav_point || h.nav_point === initialPoint.id)
             setCurrentHotspots(pointHs)
@@ -131,14 +169,12 @@ export default function VirtualTour() {
         setCurrentPoint(targetPoint)
         setSearchParams({ ambiente: targetRoom.id, ponto: targetPoint.id })
 
-        // Update room points if room changed
-        if (!isSameRoom) {
-          interactionsService.recordInteraction(property!.id, 'room_visited', targetRoom.id)
+        if (!isSameRoom && property) {
+          interactionsService.recordInteraction(property.id, 'room_visited', targetRoom.id)
           const newRoomPoints = allNavPoints.filter((p) => p.room === targetRoom.id)
           setRoomPoints(newRoomPoints)
         }
 
-        // Fetch hotspots for target room
         try {
           const hs = await hotspotsService.getHotspotsByRoom(targetRoom.id)
           const pointHs = hs.filter((h) => !h.nav_point || h.nav_point === targetPoint.id)
@@ -165,7 +201,6 @@ export default function VirtualTour() {
         (hotspot.room === hotspot.target_room && !!hotspot.target_nav_point)
 
       if (isStep && hotspot.target_nav_point) {
-        // Displace within same room (or connected room) point
         const targetPt =
           allNavPoints.find((p) => p.id === hotspot.target_nav_point) ||
           hotspot.expand?.target_nav_point
@@ -184,7 +219,6 @@ export default function VirtualTour() {
       const nextRoom = rooms.find((r) => r.id === targetRoomId)
       if (!nextRoom) return
 
-      // Find entry point for target room
       const targetRoomPoints = allNavPoints.filter((p) => p.room === nextRoom.id)
       let targetPoint = null
       if (hotspot.target_nav_point) {
@@ -197,7 +231,6 @@ export default function VirtualTour() {
       if (targetPoint) {
         navigateToPoint(targetPoint, nextRoom)
       } else {
-        // Legacy fallback
         changeRoom(nextRoom.id)
       }
     },
@@ -214,14 +247,11 @@ export default function VirtualTour() {
       if (!nextRoom) return
       setTransitionMsg(`Entrando em ${nextRoom.name}...`)
 
-      // Record room change
       interactionsService.recordInteraction(property.id, 'room_visited', targetRoomId)
 
-      // Fade out for 300ms
       setTimeout(async () => {
         setCurrentRoom(nextRoom)
 
-        // Find points for this room
         const pts = allNavPoints.filter((p) => p.room === nextRoom.id)
         setRoomPoints(pts)
         const entryPoint = pts.find((p) => p.is_entry) || pts[0] || null
@@ -233,7 +263,6 @@ export default function VirtualTour() {
           setSearchParams({ ambiente: nextRoom.id })
         }
 
-        // Load hotspots for the next room
         try {
           const hs = await hotspotsService.getHotspotsByRoom(nextRoom.id)
           if (entryPoint) {
@@ -246,7 +275,6 @@ export default function VirtualTour() {
           console.error('Erro ao buscar hotspots:', e)
         }
 
-        // Fade back in
         setTimeout(() => {
           setIsTransitioning(false)
         }, 150)
@@ -300,15 +328,15 @@ export default function VirtualTour() {
 
   if (loading || !property || !currentRoom) {
     return (
-      <div className="w-screen h-screen bg-[#1C2B36] flex flex-col items-center justify-center text-white">
-        <div className="w-16 h-16 border-4 border-white/20 border-t-[#E07A3F] rounded-full animate-spin mb-4" />
+      <div className="flex-1 w-full flex flex-col items-center justify-center text-white py-24 px-4">
+        <div className="w-14 h-14 border-4 border-white/20 border-t-[#E07A3F] rounded-full animate-spin mb-4" />
         <h2 className="text-xl font-bold tracking-tight">Preparando Visita Virtual 360°</h2>
         <p className="text-sm text-white/60 mt-1">Carregando mapa esférico e ambientes...</p>
       </div>
     )
   }
 
-  // Get active panorama URL (priority: point panorama -> room panorama -> demo)
+  // Active panorama URL (priority: point panorama -> room panorama -> demo)
   const pointPanoramaUrl = currentPoint?.panorama_image
     ? navPointsService.getFileUrl(currentPoint, currentPoint.panorama_image)
     : ''
@@ -319,257 +347,412 @@ export default function VirtualTour() {
   const panoramaUrl = getRoomPanoramaUrl(currentRoom.name, activeUploadedUrl, currentPoint?.name)
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-black select-none font-['Inter']">
-      {/* 360° Panorama Viewer */}
-      <PanoramaViewer
-        imageUrl={panoramaUrl}
-        roomName={currentRoom.name}
-        pointName={currentPoint?.name}
-        hotspots={currentHotspots}
-        onHotspotClick={handleHotspotClick}
-        isLoading={isTransitioning}
-        initialYaw={currentPoint?.initial_yaw ?? currentRoom.initial_yaw ?? 0}
-        initialPitch={currentPoint?.initial_pitch ?? currentRoom.initial_pitch ?? 0}
-      />
+    <div className="w-full max-w-[1360px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 flex flex-col gap-4 font-['Inter']">
+      {/* ===================== CABEÇALHO DO IMÓVEL (acima da moldura) ===================== */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-[#1C2B36]/80 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-white/10 shadow-xl">
+        <div className="flex items-start sm:items-center gap-3">
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="border-white/15 bg-white/5 hover:bg-white/10 text-white rounded-xl h-9 px-3 shrink-0"
+          >
+            <Link to={`/imovel/${property.id}`} className="flex items-center gap-1.5">
+              <ArrowLeft className="w-4 h-4 text-[#E07A3F]" />
+              <span className="text-xs font-semibold hidden sm:inline">Voltar ao imóvel</span>
+            </Link>
+          </Button>
 
-      {/* Fade-to-black Transition Overlay (300ms) */}
-      <div
-        className={`absolute inset-0 bg-black pointer-events-none transition-opacity duration-300 z-30 flex flex-col items-center justify-center ${
-          isTransitioning ? 'opacity-100' : 'opacity-0'
-        }`}
-      >
-        <div className="w-12 h-12 border-4 border-white/20 border-t-[#E07A3F] rounded-full animate-spin mb-3" />
-        <span className="text-white text-xs font-semibold tracking-wide">{transitionMsg}</span>
-      </div>
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[#E07A3F] bg-[#E07A3F]/15 px-2 py-0.5 rounded-full border border-[#E07A3F]/30">
+                <Sparkles className="w-3 h-3" />
+                Tour Virtual 360°
+              </span>
+              <span className="text-xs text-white/50 hidden sm:inline">•</span>
+              <span className="text-xs text-white/70 flex items-center gap-1">
+                <MapPin className="w-3.5 h-3.5 text-[#E07A3F]" />
+                {property.neighborhood}
+                {property.city ? `, ${property.city}` : ''}
+              </span>
+            </div>
+            <h1 className="text-lg sm:text-xl lg:text-2xl font-extrabold text-white tracking-tight line-clamp-1">
+              {property.title}
+            </h1>
+          </div>
+        </div>
 
-      {/* ===================== HUD OVERLAY ===================== */}
+        {/* Preço e Botão Compartilhar */}
+        <div className="flex items-center justify-between md:justify-end gap-3 pt-2 md:pt-0 border-t md:border-t-0 border-white/10">
+          <div className="text-left md:text-right">
+            <div className="text-[10px] uppercase tracking-wider text-white/50 font-semibold">
+              Valor de venda
+            </div>
+            <div className="text-base sm:text-lg font-extrabold text-[#E07A3F]">
+              {formatPrice(property.price) || 'Consulte'}
+            </div>
+          </div>
 
-      {/* Top Left: Back button + Property title */}
-      <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
-        <Button
-          asChild
-          size="sm"
-          className="bg-[rgba(15,23,32,0.72)] hover:bg-[rgba(15,23,32,0.9)] backdrop-blur-md text-white border border-white/10 rounded-full px-3.5 py-2 shadow-lg h-auto"
-        >
-          <Link to={`/imovel/${property.id}`} className="flex items-center gap-2">
-            <ArrowLeft className="w-4 h-4 text-[#E07A3F]" />
-            <span className="text-xs font-semibold hidden sm:inline">Voltar aos imóveis</span>
-          </Link>
-        </Button>
-
-        <div className="bg-[rgba(15,23,32,0.72)] backdrop-blur-md text-white border border-white/10 rounded-full px-4 py-2 shadow-lg hidden md:flex items-center gap-2">
-          <Compass className="w-3.5 h-3.5 text-[#E07A3F]" />
-          <span className="text-xs font-semibold truncate max-w-[280px]">{property.title}</span>
-          <span className="text-[11px] text-white/60">• {property.neighborhood}</span>
+          <Button
+            onClick={handleShareTour}
+            variant="outline"
+            size="sm"
+            className="border-white/15 bg-white/5 hover:bg-white/10 text-white rounded-xl h-9 px-3 gap-1.5 text-xs"
+            title="Compartilhar este tour"
+          >
+            <Share2 className="w-3.5 h-3.5 text-[#E07A3F]" />
+            <span className="hidden sm:inline">Compartilhar</span>
+          </Button>
         </div>
       </div>
 
-      {/* Top Right: Room Selector Dropdown + Share button */}
-      <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
-        <Button
-          onClick={handleShareTour}
-          size="icon"
-          className="bg-[rgba(15,23,32,0.72)] hover:bg-[rgba(15,23,32,0.9)] backdrop-blur-md text-white border border-white/10 rounded-full w-9 h-9 shadow-lg"
-          title="Compartilhar este ambiente"
+      {/* ===================== COMPOSIÇÃO PRINCIPAL (Moldura do Tour + Painel Lateral) ===================== */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start">
+        {/* MOLDURA VITRINE DO TOUR VIRTUAL (8 ou 9 colunas no desktop, altura controlada) */}
+        <div
+          ref={frameContainerRef}
+          className={cn(
+            'relative w-full rounded-3xl overflow-hidden bg-black border-2 border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.6)] group select-none transition-all duration-300',
+            isFullscreen
+              ? 'fixed inset-0 z-50 rounded-none border-0 h-screen w-screen'
+              : 'lg:col-span-8 xl:col-span-8 aspect-[4/3] sm:aspect-[16/10] lg:aspect-[16/10] min-h-[380px] max-h-[72vh]',
+          )}
         >
-          <Share2 className="w-4 h-4 text-[#E07A3F]" />
-        </Button>
+          {/* Visualizador 360° Three.js com Projeção Esférica */}
+          <PanoramaViewer
+            imageUrl={panoramaUrl}
+            roomName={currentRoom.name}
+            pointName={currentPoint?.name}
+            hotspots={currentHotspots}
+            onHotspotClick={handleHotspotClick}
+            isLoading={isTransitioning}
+            initialYaw={currentPoint?.initial_yaw ?? currentRoom.initial_yaw ?? 0}
+            initialPitch={currentPoint?.initial_pitch ?? currentRoom.initial_pitch ?? 0}
+          />
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+          {/* Fade-to-black Transition Overlay (300ms) */}
+          <div
+            className={`absolute inset-0 bg-black pointer-events-none transition-opacity duration-300 z-30 flex flex-col items-center justify-center ${
+              isTransitioning ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
+            <div className="w-12 h-12 border-4 border-white/20 border-t-[#E07A3F] rounded-full animate-spin mb-3" />
+            <span className="text-white text-xs font-semibold tracking-wide">{transitionMsg}</span>
+          </div>
+
+          {/* ===================== CONTROLES INTERNOS DA MOLDURA ===================== */}
+
+          {/* Top-left: Seletor de cômodos / Dropdown */}
+          <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-20 flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  className="bg-[#1C2B36]/85 hover:bg-[#1C2B36] backdrop-blur-md text-white border border-white/15 rounded-full px-3.5 py-1.5 shadow-xl flex items-center gap-2 h-auto transition-transform hover:scale-102"
+                >
+                  <div className="w-2 h-2 rounded-full bg-[#E07A3F] animate-ping" />
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs font-bold truncate max-w-[130px] sm:max-w-[180px]">
+                      {currentRoom.name}
+                    </span>
+                    {currentPoint && roomPoints.length > 1 && (
+                      <span className="text-[10px] text-white/60 truncate max-w-[130px] sm:max-w-[180px]">
+                        {currentPoint.name}
+                      </span>
+                    )}
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-white/60 ml-0.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="w-64 bg-[#1C2B36]/95 backdrop-blur-md text-white border-white/15 p-1.5 rounded-2xl shadow-2xl max-h-96 overflow-y-auto"
+              >
+                <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-white/50 font-bold">
+                  Ambientes do imóvel
+                </div>
+                {rooms.map((r) => {
+                  const rPoints = allNavPoints.filter((p) => p.room === r.id)
+                  const isRoomActive = r.id === currentRoom.id
+
+                  return (
+                    <div key={r.id} className="mb-1">
+                      <DropdownMenuItem
+                        onClick={() => changeRoom(r.id)}
+                        className={`cursor-pointer rounded-xl px-3 py-2 text-xs font-medium transition-colors flex items-center justify-between ${
+                          isRoomActive
+                            ? 'bg-[#E07A3F] text-white font-bold'
+                            : 'text-white/80 hover:bg-white/10 hover:text-white'
+                        }`}
+                      >
+                        <span>{r.name}</span>
+                        {rPoints.length > 1 && (
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] border-white/20 text-white/80 h-4 px-1.5"
+                          >
+                            {rPoints.length} pontos
+                          </Badge>
+                        )}
+                      </DropdownMenuItem>
+
+                      {/* Sub-items for multiple points */}
+                      {isRoomActive && rPoints.length > 1 && (
+                        <div className="pl-3 py-1 space-y-0.5 border-l-2 border-[#E07A3F]/50 ml-2 mt-1">
+                          {rPoints.map((pt) => {
+                            const isPtActive = pt.id === currentPoint?.id
+                            return (
+                              <button
+                                key={pt.id}
+                                onClick={() => navigateToPoint(pt, r)}
+                                className={`w-full text-left px-2 py-1 rounded-lg text-[11px] flex items-center gap-1.5 transition-colors ${
+                                  isPtActive
+                                    ? 'text-[#E07A3F] font-bold bg-white/10'
+                                    : 'text-white/60 hover:text-white hover:bg-white/5'
+                                }`}
+                              >
+                                <Footprints className="w-3 h-3 text-[#E07A3F]" />
+                                <span className="truncate">{pt.name}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Top-right: Botão de TELA CHEIA (expandir/recolher moldura) */}
+          <div className="absolute top-3 sm:top-4 right-3 sm:right-4 z-20 flex items-center gap-2">
             <Button
               size="sm"
-              className="bg-[rgba(15,23,32,0.72)] hover:bg-[rgba(15,23,32,0.9)] backdrop-blur-md text-white border border-white/10 rounded-full px-4 py-2 shadow-lg flex items-center gap-2 h-auto"
+              onClick={toggleFullscreen}
+              className="bg-[#1C2B36]/85 hover:bg-[#1C2B36] backdrop-blur-md text-white border border-white/15 rounded-full px-3 py-1.5 shadow-xl flex items-center gap-1.5 h-auto transition-transform hover:scale-105"
+              title={isFullscreen ? 'Recolher para moldura' : 'Expandir para tela cheia'}
+              aria-label={isFullscreen ? 'Recolher para moldura' : 'Expandir para tela cheia'}
             >
-              <div className="w-2 h-2 rounded-full bg-[#E07A3F] animate-ping" />
-              <div className="flex flex-col text-left">
-                <span className="text-xs font-bold truncate max-w-[140px] sm:max-w-[180px]">
-                  {currentRoom.name}
-                </span>
-                {currentPoint && roomPoints.length > 1 && (
-                  <span className="text-[10px] text-white/60 truncate max-w-[140px] sm:max-w-[180px]">
-                    {currentPoint.name}
-                  </span>
-                )}
-              </div>
-              <ChevronDown className="w-4 h-4 text-white/60 ml-1" />
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5 text-[#E07A3F]" />
+                  <span className="text-xs font-semibold hidden sm:inline">Recolher</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5 text-[#E07A3F]" />
+                  <span className="text-xs font-semibold hidden sm:inline">Tela cheia</span>
+                </>
+              )}
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-64 bg-[#1C2B36]/95 backdrop-blur-md text-white border-white/10 p-1.5 rounded-xl shadow-2xl max-h-96 overflow-y-auto"
-          >
-            <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-white/50 font-bold">
-              Ambientes do imóvel
+          </div>
+
+          {/* Point Navigator HUD (Street View Points pill) when room has multiple points */}
+          {roomPoints.length > 1 && currentPoint && (
+            <div className="absolute top-14 sm:top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-[#1C2B36]/90 backdrop-blur-md border border-white/15 rounded-full px-3 py-1 shadow-xl max-w-[90%] overflow-x-auto no-scrollbar">
+              <Footprints className="w-3 h-3 text-[#E07A3F] flex-shrink-0" />
+              <span className="text-[10px] font-bold text-white/80 flex-shrink-0 mr-1 hidden sm:inline">
+                Pontos de visão:
+              </span>
+              <div className="flex items-center gap-1">
+                {roomPoints.map((pt) => {
+                  const isActive = pt.id === currentPoint.id
+                  return (
+                    <button
+                      key={pt.id}
+                      onClick={() => navigateToPoint(pt, currentRoom)}
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap flex items-center gap-1 ${
+                        isActive
+                          ? 'bg-[#E07A3F] text-white shadow-md'
+                          : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
+                      }`}
+                      title={pt.name}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
+                      <span>{pt.name}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-            {rooms.map((r) => {
-              const rPoints = allNavPoints.filter((p) => p.room === r.id)
-              const isRoomActive = r.id === currentRoom.id
+          )}
 
-              return (
-                <div key={r.id} className="mb-1">
-                  <DropdownMenuItem
+          {/* Bottom Center: Mini strip horizontal com miniaturas de ambientes */}
+          <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-20 max-w-[92%] sm:max-w-xl">
+            <div className="bg-[#1C2B36]/85 backdrop-blur-md border border-white/15 rounded-2xl p-1.5 sm:p-2 shadow-2xl flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
+              {rooms.map((r) => {
+                const isSelected = r.id === currentRoom.id
+                const rPoints = allNavPoints.filter((p) => p.room === r.id)
+                const thumbUrl = r.panorama_image
+                  ? roomsService.getFileUrl(r, r.panorama_image)
+                  : getRoomPanoramaUrl(r.name)
+
+                return (
+                  <button
+                    key={r.id}
                     onClick={() => changeRoom(r.id)}
-                    className={`cursor-pointer rounded-lg px-3 py-2 text-xs font-medium transition-colors flex items-center justify-between ${
-                      isRoomActive
-                        ? 'bg-[#E07A3F] text-white font-bold'
-                        : 'text-white/80 hover:bg-white/10 hover:text-white'
+                    className={`group relative flex-shrink-0 rounded-xl overflow-hidden transition-all duration-200 text-left ${
+                      isSelected
+                        ? 'ring-2 ring-[#E07A3F] scale-105 shadow-md'
+                        : 'opacity-70 hover:opacity-100 hover:scale-100'
                     }`}
+                    style={{ width: '74px', height: '48px' }}
+                    title={r.name}
                   >
-                    <span>{r.name}</span>
+                    <img src={thumbUrl} alt={r.name} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+                    <span className="absolute bottom-1 left-1 right-1 text-[9px] font-semibold text-white leading-tight truncate block">
+                      {r.name}
+                    </span>
                     {rPoints.length > 1 && (
-                      <Badge
-                        variant="outline"
-                        className="text-[9px] border-white/20 text-white/80 h-4 px-1.5"
-                      >
-                        {rPoints.length} pontos
-                      </Badge>
+                      <span className="absolute top-1 right-1 bg-black/70 backdrop-blur-xs text-[8px] font-bold text-white px-1 rounded-sm border border-white/20">
+                        {rPoints.length}p
+                      </span>
                     )}
-                  </DropdownMenuItem>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
-                  {/* Sub-items for multiple points in the room */}
-                  {isRoomActive && rPoints.length > 1 && (
-                    <div className="pl-3 py-1 space-y-0.5 border-l-2 border-[#E07A3F]/50 ml-2 mt-1">
-                      {rPoints.map((pt) => {
-                        const isPtActive = pt.id === currentPoint?.id
-                        return (
-                          <button
-                            key={pt.id}
-                            onClick={() => navigateToPoint(pt, r)}
-                            className={`w-full text-left px-2 py-1 rounded text-[11px] flex items-center gap-1.5 transition-colors ${
-                              isPtActive
-                                ? 'text-[#E07A3F] font-bold bg-white/10'
-                                : 'text-white/60 hover:text-white hover:bg-white/5'
-                            }`}
-                          >
-                            <Footprints className="w-3 h-3 text-[#E07A3F]" />
-                            <span className="truncate">{pt.name}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* Point Navigator HUD (Street View Points pill) when room has multiple points */}
-      {roomPoints.length > 1 && currentPoint && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-[rgba(15,23,32,0.75)] backdrop-blur-md border border-white/15 rounded-full px-3 py-1.5 shadow-xl max-w-[90vw] overflow-x-auto no-scrollbar">
-          <Footprints className="w-3.5 h-3.5 text-[#E07A3F] flex-shrink-0" />
-          <span className="text-[11px] font-bold text-white/80 flex-shrink-0 mr-1 hidden sm:inline">
-            Pontos de visão:
-          </span>
-          <div className="flex items-center gap-1">
-            {roomPoints.map((pt, idx) => {
-              const isActive = pt.id === currentPoint.id
-              return (
-                <button
-                  key={pt.id}
-                  onClick={() => navigateToPoint(pt, currentRoom)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
-                    isActive
-                      ? 'bg-[#E07A3F] text-white shadow-md scale-105'
-                      : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
-                  }`}
-                  title={pt.name}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
-                  <span>{pt.name}</span>
-                </button>
-              )
-            })}
+          {/* Bottom Left: Atalho para Planta Interativa dentro da moldura */}
+          <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 z-20 flex items-center gap-1.5">
+            <Button
+              size="sm"
+              onClick={handleOpenFloorPlan}
+              className="bg-[#1C2B36]/85 hover:bg-[#1C2B36] backdrop-blur-md text-white border border-white/15 rounded-full px-3 py-1.5 shadow-xl flex items-center gap-1.5 h-auto text-xs font-semibold"
+            >
+              <Map className="w-3.5 h-3.5 text-[#E07A3F]" />
+              <span>Planta</span>
+            </Button>
           </div>
         </div>
-      )}
 
-      {/* Bottom Center: Horizontal Room Thumbnail Strip */}
-      <div className="absolute bottom-16 sm:bottom-6 left-1/2 -translate-x-1/2 z-20 max-w-[90vw] sm:max-w-2xl">
-        <div className="bg-[rgba(15,23,32,0.72)] backdrop-blur-md border border-white/10 rounded-2xl p-2 shadow-2xl flex items-center gap-2 overflow-x-auto no-scrollbar">
-          {rooms.map((r) => {
-            const isSelected = r.id === currentRoom.id
-            const rPoints = allNavPoints.filter((p) => p.room === r.id)
-            const thumbUrl = r.panorama_image
-              ? roomsService.getFileUrl(r, r.panorama_image)
-              : getRoomPanoramaUrl(r.name)
-
-            return (
-              <button
-                key={r.id}
-                onClick={() => changeRoom(r.id)}
-                className={`group relative flex-shrink-0 rounded-xl overflow-hidden transition-all duration-200 text-left ${
-                  isSelected
-                    ? 'ring-2 ring-[#E07A3F] scale-105 shadow-md'
-                    : 'opacity-70 hover:opacity-100 hover:scale-100'
-                }`}
-                style={{ width: '90px', height: '56px' }}
-              >
-                <img src={thumbUrl} alt={r.name} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                <span className="absolute bottom-1 left-1.5 right-1.5 text-[10px] font-semibold text-white leading-tight truncate block">
-                  {r.name}
+        {/* ===================== PAINEL LATERAL (desktop) / FAIXA INFERIOR (mobile) ===================== */}
+        <div className="lg:col-span-4 xl:col-span-4 flex flex-col gap-4">
+          {/* Card de Informações do Ambiente Atual */}
+          <div className="bg-[#1C2B36]/80 backdrop-blur-md rounded-3xl p-5 border border-white/10 shadow-xl space-y-4">
+            <div className="flex items-start justify-between gap-2 border-b border-white/10 pb-3">
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-[#E07A3F] font-bold">
+                  Ambiente Atual
                 </span>
-                {rPoints.length > 1 && (
-                  <span className="absolute top-1 right-1 bg-black/60 backdrop-blur-xs text-[8px] font-bold text-white px-1 rounded-sm border border-white/20">
-                    {rPoints.length}pts
-                  </span>
+                <h2 className="text-xl font-extrabold text-white mt-0.5">{currentRoom.name}</h2>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenInfo}
+                className="border-white/15 bg-white/5 hover:bg-white/10 text-white rounded-xl h-8 px-2.5 text-xs gap-1"
+                title="Ver detalhes completos"
+              >
+                <Info className="w-3.5 h-3.5 text-[#E07A3F]" />
+                <span>Info</span>
+              </Button>
+            </div>
+
+            {/* Ponto de observação & Dimensões */}
+            <div className="space-y-2">
+              {currentPoint && (
+                <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-2 rounded-xl border border-emerald-500/20 font-medium">
+                  <Footprints className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span className="truncate">Ponto: {currentPoint.name}</span>
+                </div>
+              )}
+
+              {currentRoom.dimensions && (
+                <div className="flex items-center justify-between text-xs text-white/80 bg-white/5 px-3 py-2 rounded-xl border border-white/10">
+                  <span className="text-white/50">Dimensões:</span>
+                  <span className="font-semibold text-white">{currentRoom.dimensions}</span>
+                </div>
+              )}
+
+              {currentRoom.description && (
+                <p className="text-xs text-white/70 leading-relaxed bg-white/5 p-3 rounded-xl border border-white/10 line-clamp-3">
+                  {currentRoom.description}
+                </p>
+              )}
+            </div>
+
+            {/* Mini preview da Planta Ancorada no painel lateral */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-white/80 flex items-center gap-1.5">
+                  <Map className="w-3.5 h-3.5 text-[#E07A3F]" />
+                  Planta do Imóvel
+                </span>
+                <button
+                  type="button"
+                  onClick={handleOpenFloorPlan}
+                  className="text-[11px] text-[#E07A3F] hover:underline font-semibold"
+                >
+                  Ampliar
+                </button>
+              </div>
+
+              <div
+                onClick={handleOpenFloorPlan}
+                className="relative bg-[#FAF9F6] rounded-2xl overflow-hidden border border-white/10 cursor-pointer shadow-inner group/plan h-36 flex items-center justify-center p-2"
+                title="Clique para abrir planta completa"
+              >
+                {property.floor_plan_image ? (
+                  <img
+                    src={propertiesService.getFileUrl(property, property.floor_plan_image)}
+                    alt="Planta do Imóvel"
+                    className="max-h-full max-w-full object-contain transition-transform group-hover/plan:scale-105"
+                  />
+                ) : (
+                  <div
+                    className="w-full h-full scale-90 transition-transform group-hover/plan:scale-95 pointer-events-none"
+                    dangerouslySetInnerHTML={{
+                      __html: generateDemoFloorPlan(
+                        property.title,
+                        rooms.map((r) => ({ id: r.id, name: r.name })),
+                      ),
+                    }}
+                  />
                 )}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+                <div className="absolute inset-0 bg-[#1C2B36]/20 opacity-0 group-hover/plan:opacity-100 transition-opacity flex items-center justify-center">
+                  <span className="bg-[#1C2B36]/90 text-white text-[11px] font-bold px-3 py-1.5 rounded-full border border-white/20 shadow-md">
+                    Abrir Planta
+                  </span>
+                </div>
+              </div>
+            </div>
 
-      {/* Bottom Right: Floor Plan & Room Info Toggle Buttons */}
-      <div className="absolute bottom-4 sm:bottom-6 right-4 z-20 flex items-center gap-2">
-        <Button
-          size="sm"
-          onClick={handleOpenFloorPlan}
-          className="bg-[rgba(15,23,32,0.72)] hover:bg-[rgba(15,23,32,0.9)] backdrop-blur-md text-white border border-white/10 rounded-full px-3.5 py-2 shadow-lg h-auto flex items-center gap-1.5"
-        >
-          <Map className="w-4 h-4 text-[#E07A3F]" />
-          <span className="text-xs font-semibold">Planta</span>
-        </Button>
-
-        <Button
-          size="sm"
-          onClick={handleOpenInfo}
-          className="bg-[rgba(15,23,32,0.72)] hover:bg-[rgba(15,23,32,0.9)] backdrop-blur-md text-white border border-white/10 rounded-full px-3.5 py-2 shadow-lg h-auto flex items-center gap-1.5"
-        >
-          <Info className="w-4 h-4 text-[#E07A3F]" />
-          <span className="text-xs font-semibold">Info</span>
-        </Button>
-      </div>
-
-      {/* Bottom Left Floating Card: Price & WhatsApp CTA */}
-      <div className="absolute bottom-4 sm:bottom-6 left-4 z-20 hidden sm:flex items-center gap-3 bg-[rgba(15,23,32,0.72)] backdrop-blur-md border border-white/10 rounded-2xl p-2.5 shadow-2xl">
-        <div className="px-2">
-          <div className="text-[10px] uppercase tracking-wider text-white/50 font-semibold">
-            Valor
+            {/* Botão de WhatsApp (verde oficial) */}
+            <Button
+              onClick={handleWhatsAppClick}
+              className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-extrabold py-5 rounded-2xl shadow-lg transition-transform hover:scale-101 flex items-center justify-center gap-2 text-sm"
+            >
+              <MessageCircle className="w-5 h-5 fill-current" />
+              <span>Falar com corretor no WhatsApp</span>
+            </Button>
           </div>
-          <div className="text-sm font-bold text-white">{formatPrice(property.price)}</div>
+
+          {/* Card Resumo do Imóvel */}
+          <div className="bg-[#1C2B36]/60 backdrop-blur-md rounded-2xl p-4 border border-white/10 text-xs text-white/70 space-y-2">
+            <div className="flex items-center gap-2 text-white font-semibold">
+              <Building2 className="w-4 h-4 text-[#E07A3F]" />
+              <span>3° ATO Imóveis e Negócios</span>
+            </div>
+            <p className="text-white/60 text-[11px] leading-relaxed">
+              Deseja agendar uma visita presencial ou tirar dúvidas sobre as condições deste imóvel?
+              Nossa equipe está pronta para atender você.
+            </p>
+          </div>
         </div>
-        <Button
-          size="sm"
-          onClick={handleWhatsAppClick}
-          className="bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold rounded-xl px-3 py-2 text-xs shadow-md"
-        >
-          <MessageCircle className="w-4 h-4 mr-1.5" />
-          Falar com corretor
-        </Button>
       </div>
 
-      {/* ===================== INTERACTIVE FLOOR PLAN PANEL ===================== */}
+      {/* ===================== MODAL DA PLANTA INTERATIVA ===================== */}
       <Sheet open={floorPlanOpen} onOpenChange={setFloorPlanOpen}>
         <SheetContent
           side="right"
           className="w-full sm:max-w-md bg-[#1C2B36] text-white border-l border-white/10 p-6 flex flex-col justify-between"
         >
           <div>
-            <SheetHeader className="mb-6 text-left">
+            <SheetHeader className="mb-5 text-left">
               <SheetTitle className="text-white flex items-center gap-2 text-xl font-bold">
                 <Map className="w-5 h-5 text-[#E07A3F]" />
                 <span>Planta Interativa</span>
@@ -579,7 +762,7 @@ export default function VirtualTour() {
               </p>
             </SheetHeader>
 
-            {/* Floor Plan Display with Interactive Point Markers */}
+            {/* Visualização da Planta */}
             <div className="bg-[#FAF9F6] rounded-2xl p-3 border border-white/10 shadow-inner overflow-hidden mb-4 relative">
               {property.floor_plan_image ? (
                 <div className="relative">
@@ -600,7 +783,7 @@ export default function VirtualTour() {
                       ),
                     }}
                   />
-                  {/* Position markers on the floor plan for current room's points */}
+                  {/* Marcadores dos pontos do cômodo atual */}
                   <div className="absolute inset-0 pointer-events-auto">
                     {roomPoints.map((pt) => {
                       const isCurrent = pt.id === currentPoint?.id
@@ -632,7 +815,7 @@ export default function VirtualTour() {
               )}
             </div>
 
-            {/* Room Jump List from Floor Plan */}
+            {/* Lista de Ambientes e Pontos */}
             <div className="space-y-3">
               <div className="text-xs uppercase tracking-wider text-white/50 font-bold mb-1">
                 Selecione o cômodo e o ponto
@@ -668,7 +851,6 @@ export default function VirtualTour() {
                         )}
                       </button>
 
-                      {/* Expanded points when room is active and has multiple points */}
                       {isActive && rPoints.length > 1 && (
                         <div className="grid grid-cols-1 gap-1 pl-4 pt-1">
                           {rPoints.map((pt) => {
@@ -707,7 +889,7 @@ export default function VirtualTour() {
             </div>
           </div>
 
-          <div className="pt-6 border-t border-white/10">
+          <div className="pt-5 border-t border-white/10">
             <Button
               onClick={handleWhatsAppClick}
               className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold py-5 rounded-xl shadow-md text-xs"
@@ -719,7 +901,7 @@ export default function VirtualTour() {
         </SheetContent>
       </Sheet>
 
-      {/* ===================== ROOM INFO PANEL ===================== */}
+      {/* ===================== MODAL DE INFORMAÇÕES DO AMBIENTE ===================== */}
       <Sheet open={infoOpen} onOpenChange={setInfoOpen}>
         <SheetContent
           side="left"
@@ -736,8 +918,7 @@ export default function VirtualTour() {
               </p>
             </SheetHeader>
 
-            <div className="space-y-6">
-              {/* Room Name & Active Point Badge */}
+            <div className="space-y-5">
               <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
                 <div className="text-[10px] uppercase tracking-wider text-[#E07A3F] font-bold mb-1">
                   Ambiente Atual
@@ -759,7 +940,6 @@ export default function VirtualTour() {
                 )}
               </div>
 
-              {/* Room Description */}
               {currentRoom.description && (
                 <div className="space-y-2">
                   <h4 className="text-xs uppercase tracking-wider text-white/50 font-bold">
@@ -771,7 +951,6 @@ export default function VirtualTour() {
                 </div>
               )}
 
-              {/* Property summary */}
               <div className="space-y-2">
                 <h4 className="text-xs uppercase tracking-wider text-white/50 font-bold">
                   Sobre o Imóvel
@@ -789,7 +968,7 @@ export default function VirtualTour() {
             </div>
           </div>
 
-          <div className="pt-6 border-t border-white/10 space-y-3">
+          <div className="pt-6 border-t border-white/10 space-y-2.5">
             <Button
               onClick={handleWhatsAppClick}
               className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold py-5 rounded-xl shadow-md text-xs"

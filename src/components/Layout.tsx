@@ -52,12 +52,15 @@ export default function Layout() {
     navigate('/admin')
   }
 
-  // The 360° tour screen is full screen immersive HUD (handles its own header)
+  // The 360° tour screen now uses a showcase/vitrine frame layout with the site header and elegant background
   if (isTourPage) {
     return (
-      <main className="w-screen h-screen overflow-hidden bg-black">
-        <Outlet />
-      </main>
+      <div className="min-h-screen flex flex-col bg-[#142029] text-[#F7F5F2]">
+        <NavigationHeader siteSettings={siteSettings} />
+        <main className="flex-1 pt-16 sm:pt-20 flex flex-col">
+          <Outlet />
+        </main>
+      </div>
     )
   }
 

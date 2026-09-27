@@ -331,7 +331,7 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
     const dx = e.clientX - lastMousePosRef.current.x
     const dy = e.clientY - lastMousePosRef.current.y
 
-    const sensitivity = (fovRef.current / 75) * 0.22
+    const sensitivity = (fovRef.current / DEFAULT_PANORAMA_FOV) * 0.22
     const deltaYaw = dx * sensitivity
     const deltaPitch = dy * sensitivity * 0.55
 
@@ -401,7 +401,7 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
     }
 
     // Street view rotation via wheel/trackpad
-    const factor = (fovRef.current / 75) * 0.12
+    const factor = (fovRef.current / DEFAULT_PANORAMA_FOV) * 0.12
     const deltaYaw = e.deltaX * factor
     const deltaPitch = -e.deltaY * factor * 0.55
 
