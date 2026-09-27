@@ -10,25 +10,17 @@ import { PanoramaViewer } from '@/components/tour/PanoramaViewer'
 import { getRoomPanoramaUrl, generateDemoFloorPlan } from '@/lib/panorama-assets'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
-  Compass,
   ArrowLeft,
-  ChevronDown,
   Map,
   Info,
   MessageCircle,
   Maximize2,
   Minimize2,
   Share2,
+  Check,
   Footprints,
-  Eye,
   Building2,
   MapPin,
   Sparkles,
@@ -313,17 +305,48 @@ export default function VirtualTour() {
     }).format(val)
   }
 
+  const [copiedLink, setCopiedLink] = useState(false)
+
+  // Share current room & point with exact URL query params
   const handleShareTour = () => {
+    const currentUrl = window.location.href
+    const roomText = currentRoom?.name ? ` ${currentRoom.name}` : ''
+    const pointText = currentPoint?.name ? ` (${currentPoint.name})` : ''
+
     if (navigator.share) {
-      navigator.share({
-        title: `${property?.title || 'Imóvel'} - Tour 360°`,
-        text: `Visite o ambiente ${currentRoom?.name || ''} em 360°!`,
-        url: window.location.href,
-      })
+      navigator
+        .share({
+          title: `${property?.title || 'Imóvel'} - Tour 360°`,
+          text: `Visite o ambiente${roomText}${pointText} no Tour Virtual 360°!`,
+          url: currentUrl,
+        })
+        .catch(() => {
+          // If native share dialog was cancelled or failed, copy to clipboard
+          navigator.clipboard.writeText(currentUrl)
+          setCopiedLink(true)
+          toast.success('Link deste ambiente copiado!')
+          setTimeout(() => setCopiedLink(false), 2500)
+        })
     } else {
-      navigator.clipboard.writeText(window.location.href)
-      toast.success('Link do ambiente copiado para a área de transferência!')
+      navigator.clipboard.writeText(currentUrl)
+      setCopiedLink(true)
+      toast.success('Link deste ambiente copiado para a área de transferência!')
+      setTimeout(() => setCopiedLink(false), 2500)
     }
+  }
+
+  // Open WhatsApp with predefined message pointing to current room & point
+  const handleShareOnWhatsApp = () => {
+    if (property) {
+      interactionsService.recordInteraction(property.id, 'whatsapp_clicked', currentRoom?.id)
+    }
+    const currentUrl = window.location.href
+    const text = encodeURIComponent(
+      `Olá! Veja este tour 360° de "${property?.title}": ambiente ${currentRoom?.name || ''}${
+        currentPoint ? ` (${currentPoint.name})` : ''
+      }\n\n${currentUrl}`,
+    )
+    window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener,noreferrer')
   }
 
   if (loading || !property || !currentRoom) {
@@ -421,7 +444,9 @@ export default function VirtualTour() {
           {/* Visualizador 360° Three.js com Projeção Esférica */}
           <PanoramaViewer
             imageUrl={panoramaUrl}
+            roomId={currentRoom.id}
             roomName={currentRoom.name}
+            pointId={currentPoint?.id}
             pointName={currentPoint?.name}
             hotspots={currentHotspots}
             onHotspotClick={handleHotspotClick}
@@ -440,191 +465,55 @@ export default function VirtualTour() {
             <span className="text-white text-xs font-semibold tracking-wide">{transitionMsg}</span>
           </div>
 
-          {/* ===================== CONTROLES INTERNOS DA MOLDURA ===================== */}
+          {/* ===================== CONTROLES INTERNOS DA MOLDURA (LIMPOS E DISCRETOS) ===================== */}
 
-          {/* Top-left: Seletor de cômodos / Dropdown */}
-          <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-20 flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  className="bg-[#1C2B36]/85 hover:bg-[#1C2B36] backdrop-blur-md text-white border border-white/15 rounded-full px-3.5 py-1.5 shadow-xl flex items-center gap-2 h-auto transition-transform hover:scale-102"
-                >
-                  <div className="w-2 h-2 rounded-full bg-[#E07A3F] animate-ping" />
-                  <div className="flex flex-col text-left">
-                    <span className="text-xs font-bold truncate max-w-[130px] sm:max-w-[180px]">
-                      {currentRoom.name}
-                    </span>
-                    {currentPoint && roomPoints.length > 1 && (
-                      <span className="text-[10px] text-white/60 truncate max-w-[130px] sm:max-w-[180px]">
-                        {currentPoint.name}
-                      </span>
-                    )}
-                  </div>
-                  <ChevronDown className="w-3.5 h-3.5 text-white/60 ml-0.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                className="w-64 bg-[#1C2B36]/95 backdrop-blur-md text-white border-white/15 p-1.5 rounded-2xl shadow-2xl max-h-96 overflow-y-auto"
-              >
-                <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-white/50 font-bold">
-                  Ambientes do imóvel
-                </div>
-                {rooms.map((r) => {
-                  const rPoints = allNavPoints.filter((p) => p.room === r.id)
-                  const isRoomActive = r.id === currentRoom.id
-
-                  return (
-                    <div key={r.id} className="mb-1">
-                      <DropdownMenuItem
-                        onClick={() => changeRoom(r.id)}
-                        className={`cursor-pointer rounded-xl px-3 py-2 text-xs font-medium transition-colors flex items-center justify-between ${
-                          isRoomActive
-                            ? 'bg-[#E07A3F] text-white font-bold'
-                            : 'text-white/80 hover:bg-white/10 hover:text-white'
-                        }`}
-                      >
-                        <span>{r.name}</span>
-                        {rPoints.length > 1 && (
-                          <Badge
-                            variant="outline"
-                            className="text-[9px] border-white/20 text-white/80 h-4 px-1.5"
-                          >
-                            {rPoints.length} pontos
-                          </Badge>
-                        )}
-                      </DropdownMenuItem>
-
-                      {/* Sub-items for multiple points */}
-                      {isRoomActive && rPoints.length > 1 && (
-                        <div className="pl-3 py-1 space-y-0.5 border-l-2 border-[#E07A3F]/50 ml-2 mt-1">
-                          {rPoints.map((pt) => {
-                            const isPtActive = pt.id === currentPoint?.id
-                            return (
-                              <button
-                                key={pt.id}
-                                onClick={() => navigateToPoint(pt, r)}
-                                className={`w-full text-left px-2 py-1 rounded-lg text-[11px] flex items-center gap-1.5 transition-colors ${
-                                  isPtActive
-                                    ? 'text-[#E07A3F] font-bold bg-white/10'
-                                    : 'text-white/60 hover:text-white hover:bg-white/5'
-                                }`}
-                              >
-                                <Footprints className="w-3 h-3 text-[#E07A3F]" />
-                                <span className="truncate">{pt.name}</span>
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          {/* Top-right: Botão de TELA CHEIA (expandir/recolher moldura) */}
-          <div className="absolute top-3 sm:top-4 right-3 sm:right-4 z-20 flex items-center gap-2">
+          {/* Top-right: Botão discreto de TELA CHEIA (expandir/recolher moldura) */}
+          <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 flex items-center gap-2">
             <Button
               size="sm"
               onClick={toggleFullscreen}
-              className="bg-[#1C2B36]/85 hover:bg-[#1C2B36] backdrop-blur-md text-white border border-white/15 rounded-full px-3 py-1.5 shadow-xl flex items-center gap-1.5 h-auto transition-transform hover:scale-105"
+              className="bg-black/60 hover:bg-black/85 backdrop-blur-md text-white/90 hover:text-white border border-white/10 rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 h-8 sm:h-9 transition-all text-xs"
               title={isFullscreen ? 'Recolher para moldura' : 'Expandir para tela cheia'}
               aria-label={isFullscreen ? 'Recolher para moldura' : 'Expandir para tela cheia'}
             >
               {isFullscreen ? (
                 <>
                   <Minimize2 className="w-3.5 h-3.5 text-[#E07A3F]" />
-                  <span className="text-xs font-semibold hidden sm:inline">Recolher</span>
+                  <span className="font-semibold hidden sm:inline">Recolher</span>
                 </>
               ) : (
                 <>
                   <Maximize2 className="w-3.5 h-3.5 text-[#E07A3F]" />
-                  <span className="text-xs font-semibold hidden sm:inline">Tela cheia</span>
+                  <span className="font-semibold hidden sm:inline">Tela cheia</span>
                 </>
               )}
             </Button>
           </div>
 
-          {/* Point Navigator HUD (Street View Points pill) when room has multiple points */}
-          {roomPoints.length > 1 && currentPoint && (
-            <div className="absolute top-14 sm:top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-[#1C2B36]/90 backdrop-blur-md border border-white/15 rounded-full px-3 py-1 shadow-xl max-w-[90%] overflow-x-auto no-scrollbar">
-              <Footprints className="w-3 h-3 text-[#E07A3F] flex-shrink-0" />
-              <span className="text-[10px] font-bold text-white/80 flex-shrink-0 mr-1 hidden sm:inline">
-                Pontos de visão:
+          {/* Bottom Left: Etiqueta DISCRETA e PEQUENA do ambiente atual (badge translúcido com blur, sem dropdown) + botão Planta */}
+          <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 z-20 flex items-center gap-2 max-w-[80%] sm:max-w-md pointer-events-auto">
+            {/* Discreta etiqueta do ambiente atual */}
+            <div className="bg-black/65 backdrop-blur-md text-white/95 border border-white/15 rounded-full px-3 py-1.5 shadow-lg flex items-center gap-2 text-xs">
+              <span className="w-2 h-2 rounded-full bg-[#E07A3F] shrink-0" />
+              <span className="font-semibold truncate max-w-[150px] sm:max-w-[220px]">
+                {currentRoom.name}
               </span>
-              <div className="flex items-center gap-1">
-                {roomPoints.map((pt) => {
-                  const isActive = pt.id === currentPoint.id
-                  return (
-                    <button
-                      key={pt.id}
-                      onClick={() => navigateToPoint(pt, currentRoom)}
-                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap flex items-center gap-1 ${
-                        isActive
-                          ? 'bg-[#E07A3F] text-white shadow-md'
-                          : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
-                      }`}
-                      title={pt.name}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
-                      <span>{pt.name}</span>
-                    </button>
-                  )
-                })}
-              </div>
+              {currentPoint && roomPoints.length > 1 && (
+                <span className="text-[11px] text-white/60 truncate border-l border-white/15 pl-2 max-w-[120px] sm:max-w-[160px] hidden sm:inline">
+                  {currentPoint.name}
+                </span>
+              )}
             </div>
-          )}
 
-          {/* Bottom Center: Mini strip horizontal com miniaturas de ambientes */}
-          <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-20 max-w-[92%] sm:max-w-xl">
-            <div className="bg-[#1C2B36]/85 backdrop-blur-md border border-white/15 rounded-2xl p-1.5 sm:p-2 shadow-2xl flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
-              {rooms.map((r) => {
-                const isSelected = r.id === currentRoom.id
-                const rPoints = allNavPoints.filter((p) => p.room === r.id)
-                const thumbUrl = r.panorama_image
-                  ? roomsService.getFileUrl(r, r.panorama_image)
-                  : getRoomPanoramaUrl(r.name)
-
-                return (
-                  <button
-                    key={r.id}
-                    onClick={() => changeRoom(r.id)}
-                    className={`group relative flex-shrink-0 rounded-xl overflow-hidden transition-all duration-200 text-left ${
-                      isSelected
-                        ? 'ring-2 ring-[#E07A3F] scale-105 shadow-md'
-                        : 'opacity-70 hover:opacity-100 hover:scale-100'
-                    }`}
-                    style={{ width: '74px', height: '48px' }}
-                    title={r.name}
-                  >
-                    <img src={thumbUrl} alt={r.name} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
-                    <span className="absolute bottom-1 left-1 right-1 text-[9px] font-semibold text-white leading-tight truncate block">
-                      {r.name}
-                    </span>
-                    {rPoints.length > 1 && (
-                      <span className="absolute top-1 right-1 bg-black/70 backdrop-blur-xs text-[8px] font-bold text-white px-1 rounded-sm border border-white/20">
-                        {rPoints.length}p
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Bottom Left: Atalho para Planta Interativa dentro da moldura */}
-          <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 z-20 flex items-center gap-1.5">
+            {/* Botão Planta discreto */}
             <Button
               size="sm"
               onClick={handleOpenFloorPlan}
-              className="bg-[#1C2B36]/85 hover:bg-[#1C2B36] backdrop-blur-md text-white border border-white/15 rounded-full px-3 py-1.5 shadow-xl flex items-center gap-1.5 h-auto text-xs font-semibold"
+              className="bg-black/65 hover:bg-black/85 backdrop-blur-md text-white/90 hover:text-white border border-white/15 rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 h-8 sm:h-auto text-xs font-semibold"
+              title="Abrir planta interativa"
             >
               <Map className="w-3.5 h-3.5 text-[#E07A3F]" />
-              <span>Planta</span>
+              <span className="hidden sm:inline">Planta</span>
             </Button>
           </div>
         </div>
@@ -652,15 +541,85 @@ export default function VirtualTour() {
               </Button>
             </div>
 
-            {/* Ponto de observação & Dimensões */}
-            <div className="space-y-2">
-              {currentPoint && (
-                <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-2 rounded-xl border border-emerald-500/20 font-medium">
-                  <Footprints className="w-4 h-4 shrink-0 text-emerald-400" />
-                  <span className="truncate">Ponto: {currentPoint.name}</span>
+            {/* SELEÇÃO VERTICAL DE PONTOS DE VISÃO DO AMBIENTE ATUAL (Substitui barra horizontal sobre o panorama) */}
+            {roomPoints.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-white/80 font-semibold flex items-center gap-1.5">
+                    <Footprints className="w-3.5 h-3.5 text-[#E07A3F]" />
+                    Pontos de visão do ambiente
+                  </span>
+                  <span className="text-[10px] text-white/50">
+                    {roomPoints.length} {roomPoints.length === 1 ? 'ponto' : 'pontos'}
+                  </span>
                 </div>
-              )}
 
+                <div className="flex flex-col gap-2">
+                  {roomPoints.map((pt) => {
+                    const isActive = pt.id === currentPoint?.id
+                    const ptThumb = pt.panorama_image
+                      ? navPointsService.getFileUrl(pt, pt.panorama_image)
+                      : currentRoom.panorama_image
+                        ? roomsService.getFileUrl(currentRoom, currentRoom.panorama_image)
+                        : getRoomPanoramaUrl(currentRoom.name, undefined, pt.name)
+
+                    return (
+                      <button
+                        key={pt.id}
+                        type="button"
+                        onClick={() => navigateToPoint(pt, currentRoom)}
+                        className={cn(
+                          'w-full flex items-center gap-3 p-2 rounded-2xl border text-left transition-all duration-200 group',
+                          isActive
+                            ? 'bg-[#E07A3F]/15 border-[#E07A3F] text-white shadow-md'
+                            : 'bg-white/5 border-white/10 text-white/80 hover:bg-white/10 hover:border-white/20 hover:text-white',
+                        )}
+                      >
+                        {/* Thumbnail miniatura do panorama do ponto */}
+                        <div className="relative w-14 h-11 rounded-xl overflow-hidden shrink-0 border border-white/15 bg-black">
+                          <img
+                            src={ptThumb}
+                            alt={pt.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            loading="lazy"
+                          />
+                          {isActive && (
+                            <div className="absolute inset-0 bg-[#E07A3F]/30 flex items-center justify-center">
+                              <span className="w-2 h-2 rounded-full bg-white ring-4 ring-[#E07A3F]" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Informações do Ponto */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span
+                              className={cn(
+                                'text-xs truncate block font-medium',
+                                isActive ? 'font-bold text-white' : 'text-white/90',
+                              )}
+                            >
+                              {pt.name}
+                            </span>
+                            {isActive && (
+                              <Badge className="bg-[#E07A3F] text-white text-[9px] px-1.5 py-0 h-4 border-0">
+                                Ativo
+                              </Badge>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-white/50 block truncate">
+                            {pt.is_entry ? 'Ponto de entrada' : 'Ponto de observação'}
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Dimensões & Descrição */}
+            <div className="space-y-2">
               {currentRoom.dimensions && (
                 <div className="flex items-center justify-between text-xs text-white/80 bg-white/5 px-3 py-2 rounded-xl border border-white/10">
                   <span className="text-white/50">Dimensões:</span>
@@ -721,15 +680,99 @@ export default function VirtualTour() {
               </div>
             </div>
 
-            {/* Botão de WhatsApp (verde oficial) */}
-            <Button
-              onClick={handleWhatsAppClick}
-              className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-extrabold py-5 rounded-2xl shadow-lg transition-transform hover:scale-101 flex items-center justify-center gap-2 text-sm"
-            >
-              <MessageCircle className="w-5 h-5 fill-current" />
-              <span>Falar com corretor no WhatsApp</span>
-            </Button>
+            {/* BOTÃO 'COMPARTILHAR ESTE AMBIENTE' (Item 4 do pacote aprovado) */}
+            <div className="pt-1 flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  onClick={handleShareTour}
+                  variant="outline"
+                  className="w-full border-[#E07A3F]/40 bg-[#E07A3F]/10 hover:bg-[#E07A3F]/20 text-white font-semibold py-4 rounded-2xl shadow-sm transition-all flex items-center justify-center gap-1.5 text-xs h-auto"
+                  title="Copiar link com parâmetros deste ambiente"
+                >
+                  {copiedLink ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-300">Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Share2 className="w-3.5 h-3.5 text-[#E07A3F]" />
+                      <span>Copiar link</span>
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={handleShareOnWhatsApp}
+                  variant="outline"
+                  className="w-full border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-white font-semibold py-4 rounded-2xl shadow-sm transition-all flex items-center justify-center gap-1.5 text-xs h-auto"
+                  title="Compartilhar ambiente no WhatsApp"
+                >
+                  <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Enviar WhatsApp</span>
+                </Button>
+              </div>
+
+              {/* Botão de Contato com Corretor (verde oficial) */}
+              <Button
+                onClick={handleWhatsAppClick}
+                className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-extrabold py-5 rounded-2xl shadow-lg transition-transform hover:scale-101 flex items-center justify-center gap-2 text-sm"
+              >
+                <MessageCircle className="w-5 h-5 fill-current" />
+                <span>Falar com corretor no WhatsApp</span>
+              </Button>
+            </div>
           </div>
+
+          {/* Outros Ambientes do Imóvel (Navegação Rápida com Miniaturas no Painel) */}
+          {rooms.length > 1 && (
+            <div className="bg-[#1C2B36]/70 backdrop-blur-md rounded-3xl p-4 border border-white/10 text-xs text-white/80 space-y-2.5">
+              <span className="text-[10px] uppercase tracking-wider text-white/50 font-bold block">
+                Outros ambientes
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                {rooms.map((r) => {
+                  const isCurrent = r.id === currentRoom.id
+                  const rThumb = r.panorama_image
+                    ? roomsService.getFileUrl(r, r.panorama_image)
+                    : getRoomPanoramaUrl(r.name)
+                  const rPoints = allNavPoints.filter((p) => p.room === r.id)
+
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => changeRoom(r.id)}
+                      className={cn(
+                        'relative rounded-xl overflow-hidden border text-left p-1.5 transition-all group flex flex-col justify-end h-16',
+                        isCurrent
+                          ? 'border-[#E07A3F] ring-1 ring-[#E07A3F]'
+                          : 'border-white/10 hover:border-white/30 opacity-75 hover:opacity-100',
+                      )}
+                    >
+                      <img
+                        src={rThumb}
+                        alt={r.name}
+                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
+                      <span className="relative z-10 text-[10px] font-bold text-white leading-tight truncate">
+                        {r.name}
+                      </span>
+                      {rPoints.length > 1 && (
+                        <span className="relative z-10 text-[8px] text-white/60">
+                          {rPoints.length} pontos
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Card Resumo do Imóvel */}
           <div className="bg-[#1C2B36]/60 backdrop-blur-md rounded-2xl p-4 border border-white/10 text-xs text-white/70 space-y-2">

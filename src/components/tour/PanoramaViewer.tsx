@@ -5,30 +5,20 @@ import {
   DEFAULT_PANORAMA_FOV,
   MIN_PANORAMA_FOV,
   MAX_PANORAMA_FOV,
-  LITTLE_PLANET_FOV,
-  CRYSTAL_BALL_FOV,
   MIN_PITCH_DEG,
   MAX_PITCH_DEG,
-  PanoramaProjectionMode,
   isWebGLAvailable,
   projectSphericalToScreen,
   sphericalToVector3,
 } from '@/lib/panorama-spherical'
 import type { Hotspot } from '@/types'
-import {
-  ChevronRight,
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
-  Smartphone,
-  Globe,
-  Disc,
-  Eye,
-} from 'lucide-react'
+import { ChevronRight, ZoomIn, ZoomOut, RotateCcw, Smartphone } from 'lucide-react'
 
 interface PanoramaViewerProps {
   imageUrl: string
+  roomId?: string
   roomName: string
+  pointId?: string
   pointName?: string
   hotspots: Hotspot[]
   onHotspotClick: (hotspot: Hotspot) => void
@@ -46,7 +36,9 @@ interface VisibleHotspotItem {
 
 export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   imageUrl,
+  roomId,
   roomName,
+  pointId,
   pointName,
   hotspots,
   onHotspotClick,
@@ -60,7 +52,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
   // Spherical camera orientation & FOV state
   // yaw: 0..360, pitch: -89.5..89.5 (degrees) - Full 180° vertical pan
-  // FOV limits: 45° (zoomed-in) to 110° (wide angle, prevents pole/nadir distortion). Initial: 75°.
+  // FOV limits: 45° (zoomed-in) to 110° (wide angle). Standard Insta360 FOV: 75°.
   const parsedInitialYaw =
     initialYaw !== undefined && initialYaw !== null && !isNaN(Number(initialYaw))
       ? (Number(initialYaw) + 360) % 360
@@ -74,8 +66,26 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   const pitchRef = useRef<number>(parsedInitialPitch)
   const fovRef = useRef<number>(DEFAULT_PANORAMA_FOV)
 
-  // Projection mode state: normal (equirectangular perspective) | little_planet | crystal_ball
-  const [projectionMode, setProjectionMode] = useState<PanoramaProjectionMode>('normal')
+  // Track previous room to preserve user FOV when switching points in the same room,
+  // but reset to standard 75° when changing rooms.
+  const prevRoomIdRef = useRef<string | undefined>(roomId)
+  const cameraTurnAnimRef = useRef<{
+    active: boolean
+    targetYaw: number
+    startYaw: number
+    targetPitch: number
+    startPitch: number
+    startTime: number
+    duration: number
+  }>({
+    active: false,
+    targetYaw: 0,
+    startYaw: 0,
+    targetPitch: 0,
+    startPitch: 0,
+    startTime: 0,
+    duration: 600,
+  })
 
   // Gyroscope / DeviceOrientation state (mobile optional, off by default)
   const [gyroActive, setGyroActive] = useState<boolean>(false)
@@ -121,19 +131,43 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     }
   }, [])
 
-  // On image or point change: initialize yaw and pitch to administrator defined frontal view
+  // On image, room or point change: initialize yaw and pitch smoothly with Matterport-style gentle turn
   useEffect(() => {
     const targetYaw = initialYaw !== undefined && initialYaw !== null ? (initialYaw + 360) % 360 : 0
+    // Natural level horizon at 0° unless explicitly configured otherwise by admin
     const targetPitch =
       initialPitch !== undefined && initialPitch !== null
         ? Math.max(MIN_PITCH_DEG, Math.min(MAX_PITCH_DEG, initialPitch))
         : 0
-    yawRef.current = targetYaw
-    pitchRef.current = targetPitch
-    if (fovRef.current < DEFAULT_PANORAMA_FOV && projectionMode === 'normal') {
+
+    const isDifferentRoom = roomId !== undefined && prevRoomIdRef.current !== roomId
+    if (isDifferentRoom) {
+      // Upon entering a new room, apply default FOV (75°)
       fovRef.current = DEFAULT_PANORAMA_FOV
+      prevRoomIdRef.current = roomId
     }
-  }, [imageUrl, pointName, initialPitch])
+    // When moving between points of the SAME room, keep the user's current zoom (do NOT reset FOV)
+
+    // Smooth Matterport-style camera turn animation towards target view
+    const currentYaw = ((yawRef.current % 360) + 360) % 360
+    let diffYaw = ((targetYaw - currentYaw + 540) % 360) - 180 // shortest arc -180..+180
+    // If the difference is subtle or first render, gentle rotation
+    if (Math.abs(diffYaw) > 1 || Math.abs(pitchRef.current - targetPitch) > 1) {
+      cameraTurnAnimRef.current = {
+        active: true,
+        startYaw: currentYaw,
+        targetYaw: currentYaw + diffYaw,
+        startPitch: pitchRef.current,
+        targetPitch,
+        startTime: performance.now(),
+        duration: 650, // 650ms smooth transition turn
+      }
+      velocityRef.current = { vx: 0, vy: 0 }
+    } else {
+      yawRef.current = targetYaw
+      pitchRef.current = targetPitch
+    }
+  }, [imageUrl, roomId, pointId, initialYaw, initialPitch])
 
   // Initial WebGL capability check
   useEffect(() => {
@@ -211,17 +245,36 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     const animate = () => {
       animId = requestAnimationFrame(animate)
 
-      // Apply drag inertia when not interacting
-      if (!isDraggingRef.current) {
+      // Smooth camera turn animation (Matterport style navigation transition)
+      if (cameraTurnAnimRef.current.active) {
+        const now = performance.now()
+        const elapsed = now - cameraTurnAnimRef.current.startTime
+        const t = Math.min(1, elapsed / cameraTurnAnimRef.current.duration)
+        // Quintic smooth-step easing for ultra-luxurious camera glide
+        const ease = 1 - Math.pow(1 - t, 4)
+
+        const anim = cameraTurnAnimRef.current
+        const curY = anim.startYaw + (anim.targetYaw - anim.startYaw) * ease
+        const curP = anim.startPitch + (anim.targetPitch - anim.startPitch) * ease
+
+        yawRef.current = ((curY % 360) + 360) % 360
+        pitchRef.current = Math.max(MIN_PITCH_DEG, Math.min(MAX_PITCH_DEG, curP))
+
+        if (t >= 1) {
+          cameraTurnAnimRef.current.active = false
+        }
+      } else if (!isDraggingRef.current) {
+        // High-end smooth damping inertia:
+        // 0.88 factor + threshold cutoff prevents wavy/elastic feeling
         yawRef.current = (yawRef.current - velocityRef.current.vx + 360) % 360
         pitchRef.current = Math.max(
           MIN_PITCH_DEG,
           Math.min(MAX_PITCH_DEG, pitchRef.current + velocityRef.current.vy),
         )
-        velocityRef.current.vx *= 0.92
-        velocityRef.current.vy *= 0.92
-        if (Math.abs(velocityRef.current.vx) < 0.001) velocityRef.current.vx = 0
-        if (Math.abs(velocityRef.current.vy) < 0.001) velocityRef.current.vy = 0
+        velocityRef.current.vx *= 0.88
+        velocityRef.current.vy *= 0.88
+        if (Math.abs(velocityRef.current.vx) < 0.002) velocityRef.current.vx = 0
+        if (Math.abs(velocityRef.current.vy) < 0.002) velocityRef.current.vy = 0
       }
 
       // Update camera FOV smoothly
@@ -436,13 +489,16 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     // While dragging with 1 pointer, FOV is strictly locked and cannot change
     if (!isDraggingRef.current || activePointersRef.current.size !== 1) return
 
+    // Cancel any active automated camera turn immediately upon user interaction
+    cameraTurnAnimRef.current.active = false
+
     const dx = e.clientX - lastMousePosRef.current.x
     const dy = e.clientY - lastMousePosRef.current.y
 
-    // Adaptive sensitivity: lower FOV (zoomed-in) moves slower and more accurately
-    const sensitivity = (fovRef.current / DEFAULT_PANORAMA_FOV) * 0.22
+    // Adaptive sensitivity tuned for 75° FOV: smooth, natural, linear response without wobble
+    const sensitivity = (fovRef.current / DEFAULT_PANORAMA_FOV) * 0.2
     const deltaYaw = dx * sensitivity
-    const deltaPitch = dy * sensitivity * 0.65
+    const deltaPitch = dy * sensitivity * 0.6
 
     yawRef.current = (yawRef.current - deltaYaw + 360) % 360
     pitchRef.current = Math.max(
@@ -450,7 +506,8 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       Math.min(MAX_PITCH_DEG, pitchRef.current + deltaPitch),
     )
 
-    velocityRef.current = { vx: deltaYaw * 0.35, vy: deltaPitch * 0.35 }
+    // Gentle velocity recording for natural deceleration
+    velocityRef.current = { vx: deltaYaw * 0.28, vy: deltaPitch * 0.28 }
     lastMousePosRef.current = { x: e.clientX, y: e.clientY }
   }
 
@@ -526,32 +583,24 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
   const resetView = (e?: React.MouseEvent) => {
     e?.stopPropagation()
-    setProjectionMode('normal')
     fovRef.current = DEFAULT_PANORAMA_FOV
     const targetYaw = initialYaw !== undefined && initialYaw !== null ? (initialYaw + 360) % 360 : 0
     const targetPitch =
       initialPitch !== undefined && initialPitch !== null
         ? Math.max(MIN_PITCH_DEG, Math.min(MAX_PITCH_DEG, initialPitch))
         : 0
-    yawRef.current = targetYaw
-    pitchRef.current = targetPitch
-  }
 
-  // Toggle optional Projection Modes (Normal Perspective -> Little Planet -> Crystal Ball)
-  const toggleProjectionMode = (mode: PanoramaProjectionMode) => {
-    setProjectionMode(mode)
-    if (mode === 'little_planet') {
-      // Little Planet: stereographic wide nadir view looking directly down
-      fovRef.current = LITTLE_PLANET_FOV
-      pitchRef.current = -88
-    } else if (mode === 'crystal_ball') {
-      // Crystal Ball: inverted stereographic look directly up at zenith
-      fovRef.current = CRYSTAL_BALL_FOV
-      pitchRef.current = 88
-    } else {
-      // Normal Perspective (default)
-      fovRef.current = DEFAULT_PANORAMA_FOV
-      pitchRef.current = initialPitch !== undefined ? initialPitch : 0
+    // Gentle glide back to initial frontal view
+    const currentYaw = ((yawRef.current % 360) + 360) % 360
+    const diffYaw = ((targetYaw - currentYaw + 540) % 360) - 180
+    cameraTurnAnimRef.current = {
+      active: true,
+      startYaw: currentYaw,
+      targetYaw: currentYaw + diffYaw,
+      startPitch: pitchRef.current,
+      targetPitch,
+      startTime: performance.now(),
+      duration: 500,
     }
   }
 
@@ -628,34 +677,34 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       onWheel={handleWheel}
       style={{ touchAction: 'none' }}
     >
-      {/* Floating On-Screen Controls (Zoom, Reset, Gyroscope & Projection Modes) */}
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-2 no-pan pointer-events-auto">
+      {/* Floating On-Screen Controls: Clean, discreet vertical stack (Zoom, Reset, Gyroscope) */}
+      <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-1.5 no-pan pointer-events-auto">
         <button
           type="button"
           onClick={zoomIn}
-          className="w-10 h-10 rounded-full bg-[rgba(15,23,32,0.78)] hover:bg-[rgba(15,23,32,0.95)] active:scale-95 text-white backdrop-blur-md border border-white/15 flex items-center justify-center shadow-lg transition-transform"
+          className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white/90 hover:text-white backdrop-blur-md border border-white/10 flex items-center justify-center shadow-md transition-all"
           title="Aproximar zoom (+)"
           aria-label="Aproximar zoom"
         >
-          <ZoomIn className="w-4 h-4 text-white" />
+          <ZoomIn className="w-3.5 h-3.5" />
         </button>
         <button
           type="button"
           onClick={zoomOut}
-          className="w-10 h-10 rounded-full bg-[rgba(15,23,32,0.78)] hover:bg-[rgba(15,23,32,0.95)] active:scale-95 text-white backdrop-blur-md border border-white/15 flex items-center justify-center shadow-lg transition-transform"
-          title="Afastar zoom / Visão ampla (-)"
+          className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white/90 hover:text-white backdrop-blur-md border border-white/10 flex items-center justify-center shadow-md transition-all"
+          title="Afastar zoom (-)"
           aria-label="Afastar zoom"
         >
-          <ZoomOut className="w-4 h-4 text-white" />
+          <ZoomOut className="w-3.5 h-3.5" />
         </button>
         <button
           type="button"
           onClick={resetView}
-          className="w-10 h-10 rounded-full bg-[rgba(15,23,32,0.78)] hover:bg-[rgba(15,23,32,0.95)] active:scale-95 text-white backdrop-blur-md border border-white/15 flex items-center justify-center shadow-lg transition-transform"
+          className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-[#E07A3F] hover:text-[#f3935a] backdrop-blur-md border border-white/10 flex items-center justify-center shadow-md transition-all"
           title="Redefinir visão frontal (padrão)"
           aria-label="Redefinir visão frontal"
         >
-          <RotateCcw className="w-3.5 h-3.5 text-[#E07A3F]" />
+          <RotateCcw className="w-3.5 h-3.5" />
         </button>
 
         {/* Gyroscope toggle (optional on mobile/touch, never default) */}
@@ -663,68 +712,18 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           <button
             type="button"
             onClick={toggleGyroscope}
-            className={`w-10 h-10 rounded-full backdrop-blur-md border flex items-center justify-center shadow-lg transition-all active:scale-95 ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full backdrop-blur-md border flex items-center justify-center shadow-md transition-all active:scale-95 ${
               gyroActive
                 ? 'bg-[#E07A3F] border-white text-white'
-                : 'bg-[rgba(15,23,32,0.78)] hover:bg-[rgba(15,23,32,0.95)] border-white/15 text-white/80'
+                : 'bg-black/60 hover:bg-black/85 border-white/10 text-white/80'
             }`}
             title={gyroActive ? 'Desativar giroscópio' : 'Ativar giroscópio (mover celular)'}
             aria-label="Controle por giroscópio"
           >
-            <Smartphone className="w-4 h-4" />
+            <Smartphone className="w-3.5 h-3.5" />
           </button>
         )}
-
-        {/* Projection Mode Switcher: Perspective Normal / Little Planet / Crystal Ball (optional, never default) */}
-        <div className="pt-1 flex flex-col gap-1.5 border-t border-white/10 mt-1">
-          <button
-            type="button"
-            onClick={() =>
-              toggleProjectionMode(
-                projectionMode === 'normal'
-                  ? 'little_planet'
-                  : projectionMode === 'little_planet'
-                    ? 'crystal_ball'
-                    : 'normal',
-              )
-            }
-            className={`w-10 h-10 rounded-full backdrop-blur-md border flex items-center justify-center shadow-lg transition-all active:scale-95 ${
-              projectionMode !== 'normal'
-                ? 'bg-[#1F4E5F] border-white text-white'
-                : 'bg-[rgba(15,23,32,0.78)] hover:bg-[rgba(15,23,32,0.95)] border-white/15 text-white/70'
-            }`}
-            title={`Modo de Projeção atual: ${
-              projectionMode === 'normal'
-                ? 'Perspectiva Equiretangular (Padrão Insta360)'
-                : projectionMode === 'little_planet'
-                  ? 'Little Planet (Pequeno Planeta)'
-                  : 'Crystal Ball (Bola de Cristal)'
-            }`}
-            aria-label="Alterar modo de projeção"
-          >
-            {projectionMode === 'normal' && <Eye className="w-4 h-4 text-white" />}
-            {projectionMode === 'little_planet' && <Globe className="w-4 h-4 text-emerald-300" />}
-            {projectionMode === 'crystal_ball' && <Disc className="w-4 h-4 text-cyan-300" />}
-          </button>
-        </div>
       </div>
-
-      {/* Floating active projection mode indicator (when non-standard) */}
-      {projectionMode !== 'normal' && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-black/80 backdrop-blur-md text-white text-xs px-3.5 py-1.5 rounded-full border border-white/20 shadow-xl flex items-center gap-2 pointer-events-auto">
-          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-          <span>
-            {projectionMode === 'little_planet' ? 'Modo Little Planet' : 'Modo Crystal Ball'}
-          </span>
-          <button
-            type="button"
-            onClick={() => toggleProjectionMode('normal')}
-            className="ml-1 text-[11px] underline text-[#E07A3F] hover:text-white"
-          >
-            Voltar ao normal
-          </button>
-        </div>
-      )}
 
       {/* Loading overlay */}
       {(isLoading || !imageLoaded) && (
@@ -752,9 +751,8 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         </div>
       )}
 
-      {/* Interactive Navigation Hotspots mathematically projected onto the sphere (hidden in little planet/crystal ball) */}
+      {/* Interactive Navigation Hotspots mathematically projected onto the sphere */}
       {imageLoaded &&
-        projectionMode === 'normal' &&
         visibleHotspots
           .filter((item) => item.visible)
           .map((item) => {
