@@ -60,7 +60,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
   // Spherical camera orientation & FOV state
   // yaw: 0..360, pitch: -89.5..89.5 (degrees) - Full 180° vertical pan
-  // FOV limits: 45° (zoomed-in) to 110° (wide angle, prevents pole/nadir distortion). Initial: 80°.
+  // FOV limits: 45° (zoomed-in) to 110° (wide angle, prevents pole/nadir distortion). Initial: 75°.
   const parsedInitialYaw =
     initialYaw !== undefined && initialYaw !== null && !isNaN(Number(initialYaw))
       ? (Number(initialYaw) + 360) % 360
@@ -91,6 +91,8 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map())
   const initialPinchDistRef = useRef<number | null>(null)
   const initialPinchFovRef = useRef<number>(DEFAULT_PANORAMA_FOV)
+  const isPinchingRef = useRef<boolean>(false)
+  const pinchStartTimestampRef = useRef<number>(0)
 
   // Hotspots projected in 2D coordinates
   const [visibleHotspots, setVisibleHotspots] = useState<VisibleHotspotItem[]>([])
@@ -374,15 +376,25 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
     if (activePointersRef.current.size === 1) {
       isDraggingRef.current = true
+      isPinchingRef.current = false
+      initialPinchDistRef.current = null
       lastMousePosRef.current = { x: e.clientX, y: e.clientY }
       velocityRef.current = { vx: 0, vy: 0 }
     } else if (activePointersRef.current.size === 2) {
-      // Pinch gesture start
+      // Second finger touched: pause single-finger drag
       isDraggingRef.current = false
+      velocityRef.current = { vx: 0, vy: 0 }
       const pts = Array.from(activePointersRef.current.values())
       const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
       initialPinchDistRef.current = dist
       initialPinchFovRef.current = fovRef.current
+      isPinchingRef.current = false // Will activate only after passing movement threshold
+      pinchStartTimestampRef.current = Date.now()
+    } else {
+      // 3 or more fingers: cancel both pinch and drag
+      isDraggingRef.current = false
+      isPinchingRef.current = false
+      initialPinchDistRef.current = null
     }
 
     try {
@@ -396,11 +408,24 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     if (!activePointersRef.current.has(e.pointerId)) return
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
 
-    // Pinch-to-zoom with 2 fingers on mobile
+    // Pinch-to-zoom with exactly 2 fingers
     if (activePointersRef.current.size === 2 && initialPinchDistRef.current !== null) {
       const pts = Array.from(activePointersRef.current.values())
       const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
-      if (initialPinchDistRef.current > 0) {
+      const distDiff = Math.abs(currentDist - initialPinchDistRef.current)
+
+      // Require a threshold of 12px change in distance to confirm intentional pinch
+      // (prevents accidental zoom when resting second finger or brushing touchpad)
+      if (!isPinchingRef.current) {
+        if (distDiff >= 12) {
+          isPinchingRef.current = true
+          // Reset initial reference to current point to avoid jump
+          initialPinchDistRef.current = currentDist
+          initialPinchFovRef.current = fovRef.current
+        }
+      }
+
+      if (isPinchingRef.current && initialPinchDistRef.current > 0) {
         const scale = currentDist / initialPinchDistRef.current
         const newFov = initialPinchFovRef.current / scale
         fovRef.current = Math.max(MIN_PANORAMA_FOV, Math.min(MAX_PANORAMA_FOV, newFov))
@@ -408,13 +433,14 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       return
     }
 
-    if (!isDraggingRef.current) return
+    // While dragging with 1 pointer, FOV is strictly locked and cannot change
+    if (!isDraggingRef.current || activePointersRef.current.size !== 1) return
 
     const dx = e.clientX - lastMousePosRef.current.x
     const dy = e.clientY - lastMousePosRef.current.y
 
     // Adaptive sensitivity: lower FOV (zoomed-in) moves slower and more accurately
-    const sensitivity = (fovRef.current / 80) * 0.22
+    const sensitivity = (fovRef.current / 75) * 0.22
     const deltaYaw = dx * sensitivity
     const deltaPitch = dy * sensitivity * 0.65
 
@@ -432,12 +458,15 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     activePointersRef.current.delete(e.pointerId)
     if (activePointersRef.current.size < 2) {
       initialPinchDistRef.current = null
+      isPinchingRef.current = false
     }
 
     if (activePointersRef.current.size === 1) {
       const remainingPt = Array.from(activePointersRef.current.values())[0]
       lastMousePosRef.current = { x: remainingPt.x, y: remainingPt.y }
+      // Re-enable dragging with single remaining pointer, resetting velocity
       isDraggingRef.current = true
+      velocityRef.current = { vx: 0, vy: 0 }
     } else {
       isDraggingRef.current = false
     }
@@ -449,13 +478,38 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     }
   }
 
-  // Wheel zoom
+  // Wheel handling: Google Street View behavior.
+  // Standard two-finger touchpad scroll or mouse scroll WITHOUT Ctrl rotates camera (yaw/pitch).
+  // Zoom via wheel only occurs when Ctrl or Meta (Cmd) is pressed.
+  // When active pointer drag is happening, wheel cannot alter FOV.
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault()
-    const zoomDelta = e.deltaY > 0 ? 5 : -5
-    fovRef.current = Math.max(
-      MIN_PANORAMA_FOV,
-      Math.min(MAX_PANORAMA_FOV, fovRef.current + zoomDelta),
+
+    const isZoomKey = e.ctrlKey || e.metaKey
+
+    if (isZoomKey) {
+      // Locked FOV during active drag: ignore zoom if user is currently dragging with pointer
+      if (isDraggingRef.current || activePointersRef.current.size > 0) return
+
+      const zoomDelta = e.deltaY > 0 ? 5 : -5
+      fovRef.current = Math.max(
+        MIN_PANORAMA_FOV,
+        Math.min(MAX_PANORAMA_FOV, fovRef.current + zoomDelta),
+      )
+      return
+    }
+
+    // Google Street View behavior: two-finger touchpad or mouse wheel rotates view
+    // deltaX rotates yaw (horizontal pan)
+    // deltaY tilts pitch (vertical tilt)
+    const factor = (fovRef.current / 75) * 0.12
+    const deltaYaw = e.deltaX * factor
+    const deltaPitch = -e.deltaY * factor * 0.65
+
+    yawRef.current = (yawRef.current - deltaYaw + 360) % 360
+    pitchRef.current = Math.max(
+      MIN_PITCH_DEG,
+      Math.min(MAX_PITCH_DEG, pitchRef.current + deltaPitch),
     )
   }
 
