@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { generateProceduralPanorama } from '@/lib/panorama-assets'
 import {
@@ -90,6 +90,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   // Gyroscope / DeviceOrientation state (mobile optional, off by default)
   const [gyroActive, setGyroActive] = useState<boolean>(false)
   const [hasGyroSupport, setHasGyroSupport] = useState<boolean>(false)
+  const gyroActiveRef = useRef<boolean>(false)
   const gyroBaseRef = useRef<{ alpha: number; beta: number; gamma: number } | null>(null)
   const gyroYawOffsetRef = useRef<number>(0)
   const gyroPitchOffsetRef = useRef<number>(0)
@@ -124,10 +125,17 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     animId: null,
   })
 
-  // Detect gyroscope availability on device
+  // Detect gyroscope availability on device (mobile / touch devices)
   useEffect(() => {
     if (typeof window !== 'undefined' && 'DeviceOrientationEvent' in window) {
-      setHasGyroSupport(true)
+      // Show gyro button only on devices with touch / coarse pointer support or orientation support
+      const isTouchDevice =
+        'ontouchstart' in window ||
+        navigator.maxTouchPoints > 0 ||
+        window.matchMedia('(pointer: coarse)').matches
+      if (isTouchDevice) {
+        setHasGyroSupport(true)
+      }
     }
   }, [])
 
@@ -506,6 +514,14 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       Math.min(MAX_PITCH_DEG, pitchRef.current + deltaPitch),
     )
 
+    // If gyroscope is currently active during touch drag, re-anchor offset to current yaw & pitch
+    // so when touch releases, gyro doesn't snap back to previous reference angle
+    if (gyroActiveRef.current) {
+      gyroYawOffsetRef.current = yawRef.current
+      gyroPitchOffsetRef.current = pitchRef.current
+      gyroBaseRef.current = null
+    }
+
     // Gentle velocity recording for natural deceleration
     velocityRef.current = { vx: deltaYaw * 0.28, vy: deltaPitch * 0.28 }
     lastMousePosRef.current = { x: e.clientX, y: e.clientY }
@@ -604,38 +620,9 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     }
   }
 
-  // Toggle optional Gyroscope with iOS permission request
-  const toggleGyroscope = async () => {
-    if (gyroActive) {
-      setGyroActive(false)
-      window.removeEventListener('deviceorientation', handleDeviceOrientation)
-      return
-    }
-
-    // iOS 13+ DeviceOrientationEvent permission request
-    const doe = DeviceOrientationEvent as unknown as {
-      requestPermission?: () => Promise<'granted' | 'denied'>
-    }
-    if (typeof doe.requestPermission === 'function') {
-      try {
-        const response = await doe.requestPermission()
-        if (response !== 'granted') {
-          return
-        }
-      } catch (err) {
-        console.warn('Permissão de giroscópio negada ou não suportada:', err)
-        return
-      }
-    }
-
-    gyroBaseRef.current = null
-    gyroYawOffsetRef.current = yawRef.current
-    gyroPitchOffsetRef.current = pitchRef.current
-    setGyroActive(true)
-    window.addEventListener('deviceorientation', handleDeviceOrientation, true)
-  }
-
-  const handleDeviceOrientation = (event: DeviceOrientationEvent) => {
+  // DeviceOrientation event listener
+  const handleDeviceOrientation = useCallback((event: DeviceOrientationEvent) => {
+    if (!gyroActiveRef.current) return
     if (event.alpha === null || event.beta === null || event.gamma === null) return
 
     if (!gyroBaseRef.current) {
@@ -652,19 +639,66 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     const deltaAlpha = event.alpha - gyroBaseRef.current.alpha
     const deltaBeta = event.beta - gyroBaseRef.current.beta
 
-    // Smooth update of yaw and pitch from device orientation
+    // Smooth update of yaw and pitch from device orientation when not dragging
     if (!isDraggingRef.current) {
       yawRef.current = (gyroYawOffsetRef.current - deltaAlpha + 360) % 360
       const newPitch = gyroPitchOffsetRef.current + (deltaBeta - 45) // 45° natural phone holding angle
       pitchRef.current = Math.max(MIN_PITCH_DEG, Math.min(MAX_PITCH_DEG, newPitch))
     }
-  }
+  }, [])
+
+  // Toggle optional Gyroscope with iOS permission request
+  const toggleGyroscope = useCallback(
+    async (e?: React.MouseEvent) => {
+      e?.stopPropagation()
+
+      // If already active, turn it OFF cleanly
+      if (gyroActiveRef.current) {
+        gyroActiveRef.current = false
+        setGyroActive(false)
+        gyroBaseRef.current = null
+        // Reset inertia velocity so drag resumes smoothly without sudden glide
+        velocityRef.current = { vx: 0, vy: 0 }
+        window.removeEventListener('deviceorientation', handleDeviceOrientation, true)
+        return
+      }
+
+      // iOS 13+ DeviceOrientationEvent permission request
+      const doe = DeviceOrientationEvent as unknown as {
+        requestPermission?: () => Promise<'granted' | 'denied'>
+      }
+      if (typeof doe.requestPermission === 'function') {
+        try {
+          const response = await doe.requestPermission()
+          if (response !== 'granted') {
+            return
+          }
+        } catch (err) {
+          console.warn('Permissão de giroscópio negada ou não suportada:', err)
+          return
+        }
+      }
+
+      // Capture current camera orientation as the anchor baseline so there is no jump
+      gyroBaseRef.current = null
+      gyroYawOffsetRef.current = yawRef.current
+      gyroPitchOffsetRef.current = pitchRef.current
+      gyroActiveRef.current = true
+      setGyroActive(true)
+
+      // Remove any existing listener before attaching to avoid duplicate handlers
+      window.removeEventListener('deviceorientation', handleDeviceOrientation, true)
+      window.addEventListener('deviceorientation', handleDeviceOrientation, true)
+    },
+    [handleDeviceOrientation],
+  )
 
   useEffect(() => {
     return () => {
-      window.removeEventListener('deviceorientation', handleDeviceOrientation)
+      gyroActiveRef.current = false
+      window.removeEventListener('deviceorientation', handleDeviceOrientation, true)
     }
-  }, [])
+  }, [handleDeviceOrientation])
 
   return (
     <div

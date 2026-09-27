@@ -44,6 +44,7 @@ export default function VirtualTour() {
   const [floorPlanOpen, setFloorPlanOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isFullscreenSupported, setIsFullscreenSupported] = useState(true)
   const frameContainerRef = useRef<HTMLDivElement>(null)
 
   // Transition state: fade-to-black 300ms
@@ -51,40 +52,183 @@ export default function VirtualTour() {
   const [transitionMsg, setTransitionMsg] = useState('Navegando...')
   const [loading, setLoading] = useState(true)
 
-  // Synchronize fullscreen change events (browser ESC or Fullscreen API)
+  // Synchronize fullscreen change events (standard, webkit, moz, ms)
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      const activeEl = document.fullscreenElement
-      setIsFullscreen(Boolean(activeEl && frameContainerRef.current?.contains(activeEl)))
+    const getActiveFullscreenElement = (): Element | null => {
+      const doc = document as unknown as {
+        fullscreenElement?: Element | null
+        webkitFullscreenElement?: Element | null
+        mozFullScreenElement?: Element | null
+        msFullscreenElement?: Element | null
+      }
+      return (
+        doc.fullscreenElement ||
+        doc.webkitFullscreenElement ||
+        doc.mozFullScreenElement ||
+        doc.msFullscreenElement ||
+        null
+      )
     }
 
-    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    // Check if fullscreen is supported on this browser/device
+    const checkFullscreenSupport = () => {
+      const doc = document as unknown as {
+        fullscreenEnabled?: boolean
+        webkitFullscreenEnabled?: boolean
+        mozFullScreenEnabled?: boolean
+        msFullscreenEnabled?: boolean
+      }
+      const el = frameContainerRef.current as unknown as {
+        requestFullscreen?: () => Promise<void>
+        webkitRequestFullscreen?: () => Promise<void>
+        mozRequestFullScreen?: () => Promise<void>
+        msRequestFullscreen?: () => Promise<void>
+      } | null
+
+      const docSupport =
+        Boolean(doc.fullscreenEnabled) ||
+        Boolean(doc.webkitFullscreenEnabled) ||
+        Boolean(doc.mozFullScreenEnabled) ||
+        Boolean(doc.msFullscreenEnabled)
+
+      const elemSupport =
+        Boolean(el?.requestFullscreen) ||
+        Boolean(el?.webkitRequestFullscreen) ||
+        Boolean(el?.mozRequestFullScreen) ||
+        Boolean(el?.msRequestFullscreen)
+
+      // Always supported either through native APIs or CSS fallback for mobile
+      setIsFullscreenSupported(docSupport || elemSupport || typeof window !== 'undefined')
+    }
+    checkFullscreenSupport()
+
+    const handleFullscreenChange = () => {
+      const activeEl = getActiveFullscreenElement()
+      if (activeEl) {
+        setIsFullscreen(
+          Boolean(
+            frameContainerRef.current &&
+            (frameContainerRef.current === activeEl ||
+              frameContainerRef.current.contains(activeEl)),
+          ),
+        )
+      } else {
+        // Exited native fullscreen
+        setIsFullscreen(false)
+      }
+    }
+
+    const events = [
+      'fullscreenchange',
+      'webkitfullscreenchange',
+      'mozfullscreenchange',
+      'MSFullscreenChange',
+    ]
+
+    events.forEach((evt) => document.addEventListener(evt, handleFullscreenChange))
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+      events.forEach((evt) => document.removeEventListener(evt, handleFullscreenChange))
     }
   }, [])
 
-  // Toggle true DOM fullscreen on the showcase frame container
+  // Toggle DOM / vendor fullscreen on the showcase frame container with mobile fallbacks
   const toggleFullscreen = useCallback(async () => {
-    const elem = frameContainerRef.current
-    if (!elem) return
+    const elem = frameContainerRef.current as unknown as {
+      requestFullscreen?: () => Promise<void>
+      webkitRequestFullscreen?: () => Promise<void>
+      mozRequestFullScreen?: () => Promise<void>
+      msRequestFullscreen?: () => Promise<void>
+    } | null
 
-    try {
-      if (!document.fullscreenElement) {
+    const doc = document as unknown as {
+      fullscreenElement?: Element | null
+      webkitFullscreenElement?: Element | null
+      mozFullScreenElement?: Element | null
+      msFullscreenElement?: Element | null
+      exitFullscreen?: () => Promise<void>
+      webkitExitFullscreen?: () => Promise<void>
+      mozCancelFullScreen?: () => Promise<void>
+      msExitFullscreen?: () => Promise<void>
+      documentElement: {
+        requestFullscreen?: () => Promise<void>
+        webkitRequestFullscreen?: () => Promise<void>
+        mozRequestFullScreen?: () => Promise<void>
+        msRequestFullscreen?: () => Promise<void>
+      }
+    }
+
+    const currentFs =
+      doc.fullscreenElement ||
+      doc.webkitFullscreenElement ||
+      doc.mozFullScreenElement ||
+      doc.msFullscreenElement
+
+    // Case 1: Already active -> exit fullscreen
+    if (isFullscreen || currentFs) {
+      try {
+        if (doc.exitFullscreen) {
+          await doc.exitFullscreen()
+        } else if (doc.webkitExitFullscreen) {
+          await doc.webkitExitFullscreen()
+        } else if (doc.mozCancelFullScreen) {
+          await doc.mozCancelFullScreen()
+        } else if (doc.msExitFullscreen) {
+          await doc.msExitFullscreen()
+        }
+      } catch (err) {
+        console.warn('Erro ao sair do fullscreen nativo:', err)
+      } finally {
+        setIsFullscreen(false)
+      }
+      return
+    }
+
+    // Case 2: Inactive -> request fullscreen with multi-step fallback
+    let entered = false
+
+    // Try container element fullscreen first
+    if (elem) {
+      try {
         if (elem.requestFullscreen) {
           await elem.requestFullscreen()
+          entered = true
+        } else if (elem.webkitRequestFullscreen) {
+          await elem.webkitRequestFullscreen()
+          entered = true
+        } else if (elem.mozRequestFullScreen) {
+          await elem.mozRequestFullScreen()
+          entered = true
+        } else if (elem.msRequestFullscreen) {
+          await elem.msRequestFullscreen()
+          entered = true
         }
-      } else {
-        if (document.exitFullscreen) {
-          await document.exitFullscreen()
-        }
+      } catch (err) {
+        console.warn(
+          'Falha no requestFullscreen do elemento, tentando fallback para documentElement:',
+          err,
+        )
       }
-    } catch (err) {
-      console.warn('Erro ao alternar modo tela cheia:', err)
-      // Fallback: toggle internal state
-      setIsFullscreen((prev) => !prev)
     }
-  }, [])
+
+    // Fallback 1: document.documentElement fullscreen (Android Chrome / tablet edge cases)
+    if (!entered && doc.documentElement) {
+      try {
+        if (doc.documentElement.requestFullscreen) {
+          await doc.documentElement.requestFullscreen()
+          entered = true
+        } else if (doc.documentElement.webkitRequestFullscreen) {
+          await doc.documentElement.webkitRequestFullscreen()
+          entered = true
+        }
+      } catch (err) {
+        console.warn('Falha no fallback de fullscreen do documentElement:', err)
+      }
+    }
+
+    // Fallback 2: CSS full viewport overlay (e.g. iOS Safari iPhone which lacks element.requestFullscreen)
+    // When isFullscreen = true, the frame container applies `fixed inset-0 z-50 rounded-none border-0 h-screen w-screen`
+    setIsFullscreen(true)
+  }, [isFullscreen])
 
   // Initial load
   useEffect(() => {
@@ -469,25 +613,27 @@ export default function VirtualTour() {
 
           {/* Top-right: Botão discreto de TELA CHEIA (expandir/recolher moldura) */}
           <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 flex items-center gap-2">
-            <Button
-              size="sm"
-              onClick={toggleFullscreen}
-              className="bg-black/60 hover:bg-black/85 backdrop-blur-md text-white/90 hover:text-white border border-white/10 rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 h-8 sm:h-9 transition-all text-xs"
-              title={isFullscreen ? 'Recolher para moldura' : 'Expandir para tela cheia'}
-              aria-label={isFullscreen ? 'Recolher para moldura' : 'Expandir para tela cheia'}
-            >
-              {isFullscreen ? (
-                <>
-                  <Minimize2 className="w-3.5 h-3.5 text-[#E07A3F]" />
-                  <span className="font-semibold hidden sm:inline">Recolher</span>
-                </>
-              ) : (
-                <>
-                  <Maximize2 className="w-3.5 h-3.5 text-[#E07A3F]" />
-                  <span className="font-semibold hidden sm:inline">Tela cheia</span>
-                </>
-              )}
-            </Button>
+            {isFullscreenSupported && (
+              <Button
+                size="sm"
+                onClick={toggleFullscreen}
+                className="bg-black/60 hover:bg-black/85 backdrop-blur-md text-white/90 hover:text-white border border-white/10 rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 h-8 sm:h-9 transition-all text-xs"
+                title={isFullscreen ? 'Recolher para moldura' : 'Expandir para tela cheia'}
+                aria-label={isFullscreen ? 'Recolher para moldura' : 'Expandir para tela cheia'}
+              >
+                {isFullscreen ? (
+                  <>
+                    <Minimize2 className="w-3.5 h-3.5 text-[#E07A3F]" />
+                    <span className="font-semibold hidden sm:inline">Recolher</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="w-3.5 h-3.5 text-[#E07A3F]" />
+                    <span className="font-semibold hidden sm:inline">Tela cheia</span>
+                  </>
+                )}
+              </Button>
+            )}
           </div>
 
           {/* Bottom Left: Etiqueta DISCRETA e PEQUENA do ambiente atual (badge translúcido com blur, sem dropdown) + botão Planta */}
