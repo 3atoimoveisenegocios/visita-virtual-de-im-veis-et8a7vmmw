@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { generateProceduralPanorama } from '@/lib/panorama-assets'
 import type { Hotspot } from '@/types'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 
 interface PanoramaViewerProps {
   imageUrl: string
@@ -26,14 +26,22 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   const [imgElement, setImgElement] = useState<HTMLImageElement | null>(null)
 
   // View state (spherical angles in degrees)
+  // FOV limits: 45° (max zoom-in) up to 135° (wide zoom-out). Default open FOV: 95°.
+  const DEFAULT_FOV = 95
+  const MIN_FOV = 45
+  const MAX_FOV = 135
+
   const yawRef = useRef<number>(0) // 0..360 horizontal
   const pitchRef = useRef<number>(0) // -85..85 vertical
-  const fovRef = useRef<number>(75) // 45..100 field of view
+  const fovRef = useRef<number>(DEFAULT_FOV) // Field of view (higher = zoomed out / wider angle)
 
-  // Drag interaction state
+  // Drag interaction and touch pinch state
   const isDraggingRef = useRef<boolean>(false)
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const velocityRef = useRef<{ vx: number; vy: number }>({ vx: 0, vy: 0 })
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map())
+  const initialPinchDistRef = useRef<number | null>(null)
+  const initialPinchFovRef = useRef<number>(DEFAULT_FOV)
   const [visibleHotspots, setVisibleHotspots] = useState<
     Array<{
       hotspot: Hotspot
@@ -42,6 +50,15 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       visible: boolean
     }>
   >([])
+
+  // On image/point change: keep an open wide-angle FOV so transitions don't abruptly zoom in
+  useEffect(() => {
+    // If the user was zoomed into a detail (< DEFAULT_FOV), reset to the open DEFAULT_FOV
+    // so moving into a new room or point provides a full panoramic overview
+    if (fovRef.current < DEFAULT_FOV) {
+      fovRef.current = DEFAULT_FOV
+    }
+  }, [imageUrl])
 
   // Load image with fallback
   useEffect(() => {
@@ -197,22 +214,59 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     return () => cancelAnimationFrame(animId)
   }, [render])
 
-  // Pointer event handlers (Mouse & Touch)
+  // Pointer event handlers (Mouse, Touch, and Pinch-to-zoom)
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('.interactive-hotspot')) return
-    isDraggingRef.current = true
-    lastMousePosRef.current = { x: e.clientX, y: e.clientY }
-    velocityRef.current = { vx: 0, vy: 0 }
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    if (
+      (e.target as HTMLElement).closest('.interactive-hotspot') ||
+      (e.target as HTMLElement).closest('.no-pan')
+    )
+      return
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+    if (activePointersRef.current.size === 1) {
+      isDraggingRef.current = true
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY }
+      velocityRef.current = { vx: 0, vy: 0 }
+    } else if (activePointersRef.current.size === 2) {
+      // Pinch gesture start
+      isDraggingRef.current = false
+      const pts = Array.from(activePointersRef.current.values())
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+      initialPinchDistRef.current = dist
+      initialPinchFovRef.current = fovRef.current
+    }
+
+    try {
+      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
+    }
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!activePointersRef.current.has(e.pointerId)) return
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+    // Pinch-to-zoom with 2 fingers
+    if (activePointersRef.current.size === 2 && initialPinchDistRef.current !== null) {
+      const pts = Array.from(activePointersRef.current.values())
+      const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+      if (initialPinchDistRef.current > 0) {
+        const scale = currentDist / initialPinchDistRef.current
+        // Spreading fingers (scale > 1) = zoom in (smaller FOV)
+        // Pinching fingers (scale < 1) = zoom out (larger FOV)
+        const newFov = initialPinchFovRef.current / scale
+        fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, newFov))
+      }
+      return
+    }
+
     if (!isDraggingRef.current) return
 
     const dx = e.clientX - lastMousePosRef.current.x
     const dy = e.clientY - lastMousePosRef.current.y
 
-    const sensitivity = (fovRef.current / 80) * 0.28
+    const sensitivity = (fovRef.current / 95) * 0.28
     const deltaYaw = dx * sensitivity
     const deltaPitch = dy * sensitivity * 0.7
 
@@ -224,7 +278,20 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   }
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    isDraggingRef.current = false
+    activePointersRef.current.delete(e.pointerId)
+    if (activePointersRef.current.size < 2) {
+      initialPinchDistRef.current = null
+    }
+
+    if (activePointersRef.current.size === 1) {
+      // Switch back to single finger drag
+      const remainingPt = Array.from(activePointersRef.current.values())[0]
+      lastMousePosRef.current = { x: remainingPt.x, y: remainingPt.y }
+      isDraggingRef.current = true
+    } else {
+      isDraggingRef.current = false
+    }
+
     try {
       ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
     } catch {
@@ -232,11 +299,28 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     }
   }
 
-  // Mouse wheel zoom
+  // Mouse wheel zoom: deltaY > 0 is scroll down (zoom out = increase FOV), deltaY < 0 is scroll up (zoom in = decrease FOV)
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault()
-    const zoomDelta = e.deltaY > 0 ? 3 : -3
-    fovRef.current = Math.max(45, Math.min(100, fovRef.current + zoomDelta))
+    const zoomDelta = e.deltaY > 0 ? 5 : -5
+    fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, fovRef.current + zoomDelta))
+  }
+
+  // Zoom control buttons
+  const zoomIn = (e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, fovRef.current - 12))
+  }
+
+  const zoomOut = (e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, fovRef.current + 12))
+  }
+
+  const resetView = (e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    fovRef.current = DEFAULT_FOV
+    pitchRef.current = 0
   }
 
   return (
@@ -251,6 +335,37 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       style={{ touchAction: 'none' }}
     >
       <canvas ref={canvasRef} className="w-full h-full block" />
+
+      {/* Floating On-Screen Zoom & Reset Controls */}
+      <div className="absolute right-4 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-2 no-pan pointer-events-auto">
+        <button
+          type="button"
+          onClick={zoomIn}
+          className="w-10 h-10 rounded-full bg-[rgba(15,23,32,0.78)] hover:bg-[rgba(15,23,32,0.95)] active:scale-95 text-white backdrop-blur-md border border-white/15 flex items-center justify-center shadow-lg transition-transform"
+          title="Aproximar zoom (+)"
+          aria-label="Aproximar zoom"
+        >
+          <ZoomIn className="w-4 h-4 text-white" />
+        </button>
+        <button
+          type="button"
+          onClick={zoomOut}
+          className="w-10 h-10 rounded-full bg-[rgba(15,23,32,0.78)] hover:bg-[rgba(15,23,32,0.95)] active:scale-95 text-white backdrop-blur-md border border-white/15 flex items-center justify-center shadow-lg transition-transform"
+          title="Afastar zoom / Visão ampla (-)"
+          aria-label="Afastar zoom"
+        >
+          <ZoomOut className="w-4 h-4 text-white" />
+        </button>
+        <button
+          type="button"
+          onClick={resetView}
+          className="w-10 h-10 rounded-full bg-[rgba(15,23,32,0.78)] hover:bg-[rgba(15,23,32,0.95)] active:scale-95 text-white backdrop-blur-md border border-white/15 flex items-center justify-center shadow-lg transition-transform"
+          title="Redefinir visão panorâmica"
+          aria-label="Redefinir visão panorâmica"
+        >
+          <RotateCcw className="w-3.5 h-3.5 text-[#E07A3F]" />
+        </button>
+      </div>
 
       {/* Loading overlay */}
       {(isLoading || !imageLoaded) && (

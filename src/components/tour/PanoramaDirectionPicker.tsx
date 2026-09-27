@@ -31,9 +31,13 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
   // Current viewing yaw (0..360) and pitch (-85..85)
   // Direction directly corresponds to yaw! When user looks at the center crosshair,
   // the compass direction is the center yaw.
+  const DEFAULT_FOV = 95
+  const MIN_FOV = 45
+  const MAX_FOV = 135
+
   const yawRef = useRef<number>(direction)
   const pitchRef = useRef<number>(0)
-  const fovRef = useRef<number>(75)
+  const fovRef = useRef<number>(DEFAULT_FOV)
 
   // Sync yawRef when direction changes from external (e.g. numeric input or slider)
   useEffect(() => {
@@ -44,9 +48,12 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
     }
   }, [direction])
 
-  // Drag interaction state
+  // Drag interaction state and touch pinch
   const isDraggingRef = useRef<boolean>(false)
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map())
+  const initialPinchDistRef = useRef<number | null>(null)
+  const initialPinchFovRef = useRef<number>(DEFAULT_FOV)
 
   // Load image with fallback to procedural panorama
   useEffect(() => {
@@ -177,12 +184,23 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
     return () => cancelAnimationFrame(animId)
   }, [render])
 
-  // Drag handlers with pointer events (mouse + touch)
+  // Drag handlers with pointer events (mouse + touch + pinch)
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // Ignore clicks on control overlay buttons
     if ((e.target as HTMLElement).closest('.no-pan')) return
-    isDraggingRef.current = true
-    lastMousePosRef.current = { x: e.clientX, y: e.clientY }
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+    if (activePointersRef.current.size === 1) {
+      isDraggingRef.current = true
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY }
+    } else if (activePointersRef.current.size === 2) {
+      isDraggingRef.current = false
+      const pts = Array.from(activePointersRef.current.values())
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+      initialPinchDistRef.current = dist
+      initialPinchFovRef.current = fovRef.current
+    }
+
     try {
       ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     } catch {
@@ -191,12 +209,26 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!activePointersRef.current.has(e.pointerId)) return
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+    if (activePointersRef.current.size === 2 && initialPinchDistRef.current !== null) {
+      const pts = Array.from(activePointersRef.current.values())
+      const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+      if (initialPinchDistRef.current > 0) {
+        const scale = currentDist / initialPinchDistRef.current
+        const newFov = initialPinchFovRef.current / scale
+        fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, newFov))
+      }
+      return
+    }
+
     if (!isDraggingRef.current) return
 
     const dx = e.clientX - lastMousePosRef.current.x
     const dy = e.clientY - lastMousePosRef.current.y
 
-    const sensitivity = (fovRef.current / 80) * 0.28
+    const sensitivity = (fovRef.current / 95) * 0.28
     const deltaYaw = dx * sensitivity
     const deltaPitch = dy * sensitivity * 0.55
 
@@ -212,22 +244,34 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
   }
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isDraggingRef.current) {
-      isDraggingRef.current = false
-      try {
-        ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
-      } catch {
-        /* ignore */
+    activePointersRef.current.delete(e.pointerId)
+    if (activePointersRef.current.size < 2) {
+      initialPinchDistRef.current = null
+    }
+
+    if (activePointersRef.current.size === 1) {
+      const remainingPt = Array.from(activePointersRef.current.values())[0]
+      lastMousePosRef.current = { x: remainingPt.x, y: remainingPt.y }
+      isDraggingRef.current = true
+    } else {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false
+        const roundedDeg = Math.round(yawRef.current) % 360
+        onChangeDirection(roundedDeg)
       }
-      const roundedDeg = Math.round(yawRef.current) % 360
-      onChangeDirection(roundedDeg)
+    }
+
+    try {
+      ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
     }
   }
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault()
-    const zoomDelta = e.deltaY > 0 ? 4 : -4
-    fovRef.current = Math.max(45, Math.min(95, fovRef.current + zoomDelta))
+    const zoomDelta = e.deltaY > 0 ? 5 : -5
+    fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, fovRef.current + zoomDelta))
   }
 
   const rotateBy = (degDelta: number) => {
@@ -237,7 +281,7 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
   }
 
   const zoomBy = (fovDelta: number) => {
-    fovRef.current = Math.max(45, Math.min(95, fovRef.current + fovDelta))
+    fovRef.current = Math.max(MIN_FOV, Math.min(MAX_FOV, fovRef.current + fovDelta))
   }
 
   const getCardinalName = (deg: number) => {
