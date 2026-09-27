@@ -328,6 +328,8 @@ export default function VirtualTour() {
         hotspots={currentHotspots}
         onHotspotClick={handleHotspotClick}
         isLoading={isTransitioning}
+        initialYaw={currentPoint?.initial_yaw ?? currentRoom.initial_yaw ?? 0}
+        initialPitch={currentPoint?.initial_pitch ?? currentRoom.initial_pitch ?? 0}
       />
 
       {/* Fade-to-black Transition Overlay (300ms) */}

@@ -5,12 +5,26 @@ import {
   DEFAULT_PANORAMA_FOV,
   MIN_PANORAMA_FOV,
   MAX_PANORAMA_FOV,
+  LITTLE_PLANET_FOV,
+  CRYSTAL_BALL_FOV,
+  MIN_PITCH_DEG,
+  MAX_PITCH_DEG,
+  PanoramaProjectionMode,
   isWebGLAvailable,
   projectSphericalToScreen,
   sphericalToVector3,
 } from '@/lib/panorama-spherical'
 import type { Hotspot } from '@/types'
-import { ChevronRight, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
+import {
+  ChevronRight,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Smartphone,
+  Globe,
+  Disc,
+  Eye,
+} from 'lucide-react'
 
 interface PanoramaViewerProps {
   imageUrl: string
@@ -19,6 +33,8 @@ interface PanoramaViewerProps {
   hotspots: Hotspot[]
   onHotspotClick: (hotspot: Hotspot) => void
   isLoading?: boolean
+  initialYaw?: number
+  initialPitch?: number
 }
 
 interface VisibleHotspotItem {
@@ -35,17 +51,38 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   hotspots,
   onHotspotClick,
   isLoading = false,
+  initialYaw = 0,
+  initialPitch = 0,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [webglSupported, setWebglSupported] = useState(true)
 
   // Spherical camera orientation & FOV state
-  // yaw: 0..360, pitch: -85..85 (degrees)
+  // yaw: 0..360, pitch: -89.5..89.5 (degrees) - Full 180° vertical pan
   // FOV limits: 45° (zoomed-in) to 110° (wide angle, prevents pole/nadir distortion). Initial: 80°.
-  const yawRef = useRef<number>(0)
-  const pitchRef = useRef<number>(0)
+  const parsedInitialYaw =
+    initialYaw !== undefined && initialYaw !== null && !isNaN(Number(initialYaw))
+      ? (Number(initialYaw) + 360) % 360
+      : 0
+  const parsedInitialPitch =
+    initialPitch !== undefined && initialPitch !== null && !isNaN(Number(initialPitch))
+      ? Math.max(MIN_PITCH_DEG, Math.min(MAX_PITCH_DEG, Number(initialPitch)))
+      : 0
+
+  const yawRef = useRef<number>(parsedInitialYaw)
+  const pitchRef = useRef<number>(parsedInitialPitch)
   const fovRef = useRef<number>(DEFAULT_PANORAMA_FOV)
+
+  // Projection mode state: normal (equirectangular perspective) | little_planet | crystal_ball
+  const [projectionMode, setProjectionMode] = useState<PanoramaProjectionMode>('normal')
+
+  // Gyroscope / DeviceOrientation state (mobile optional, off by default)
+  const [gyroActive, setGyroActive] = useState<boolean>(false)
+  const [hasGyroSupport, setHasGyroSupport] = useState<boolean>(false)
+  const gyroBaseRef = useRef<{ alpha: number; beta: number; gamma: number } | null>(null)
+  const gyroYawOffsetRef = useRef<number>(0)
+  const gyroPitchOffsetRef = useRef<number>(0)
 
   // Drag interaction, inertia and touch pinch state
   const isDraggingRef = useRef<boolean>(false)
@@ -75,12 +112,26 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     animId: null,
   })
 
-  // On image or point change: keep an open wide-angle FOV so transitions don't abruptly zoom in
+  // Detect gyroscope availability on device
   useEffect(() => {
-    if (fovRef.current < DEFAULT_PANORAMA_FOV) {
+    if (typeof window !== 'undefined' && 'DeviceOrientationEvent' in window) {
+      setHasGyroSupport(true)
+    }
+  }, [])
+
+  // On image or point change: initialize yaw and pitch to administrator defined frontal view
+  useEffect(() => {
+    const targetYaw = initialYaw !== undefined && initialYaw !== null ? (initialYaw + 360) % 360 : 0
+    const targetPitch =
+      initialPitch !== undefined && initialPitch !== null
+        ? Math.max(MIN_PITCH_DEG, Math.min(MAX_PITCH_DEG, initialPitch))
+        : 0
+    yawRef.current = targetYaw
+    pitchRef.current = targetPitch
+    if (fovRef.current < DEFAULT_PANORAMA_FOV && projectionMode === 'normal') {
       fovRef.current = DEFAULT_PANORAMA_FOV
     }
-  }, [imageUrl])
+  }, [imageUrl, pointName, initialPitch])
 
   // Initial WebGL capability check
   useEffect(() => {
@@ -161,7 +212,10 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       // Apply drag inertia when not interacting
       if (!isDraggingRef.current) {
         yawRef.current = (yawRef.current - velocityRef.current.vx + 360) % 360
-        pitchRef.current = Math.max(-85, Math.min(85, pitchRef.current + velocityRef.current.vy))
+        pitchRef.current = Math.max(
+          MIN_PITCH_DEG,
+          Math.min(MAX_PITCH_DEG, pitchRef.current + velocityRef.current.vy),
+        )
         velocityRef.current.vx *= 0.92
         velocityRef.current.vy *= 0.92
         if (Math.abs(velocityRef.current.vx) < 0.001) velocityRef.current.vx = 0
@@ -365,7 +419,10 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
     const deltaPitch = dy * sensitivity * 0.65
 
     yawRef.current = (yawRef.current - deltaYaw + 360) % 360
-    pitchRef.current = Math.max(-85, Math.min(85, pitchRef.current + deltaPitch))
+    pitchRef.current = Math.max(
+      MIN_PITCH_DEG,
+      Math.min(MAX_PITCH_DEG, pitchRef.current + deltaPitch),
+    )
 
     velocityRef.current = { vx: deltaYaw * 0.35, vy: deltaPitch * 0.35 }
     lastMousePosRef.current = { x: e.clientX, y: e.clientY }
@@ -415,9 +472,96 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
 
   const resetView = (e?: React.MouseEvent) => {
     e?.stopPropagation()
+    setProjectionMode('normal')
     fovRef.current = DEFAULT_PANORAMA_FOV
-    pitchRef.current = 0
+    const targetYaw = initialYaw !== undefined && initialYaw !== null ? (initialYaw + 360) % 360 : 0
+    const targetPitch =
+      initialPitch !== undefined && initialPitch !== null
+        ? Math.max(MIN_PITCH_DEG, Math.min(MAX_PITCH_DEG, initialPitch))
+        : 0
+    yawRef.current = targetYaw
+    pitchRef.current = targetPitch
   }
+
+  // Toggle optional Projection Modes (Normal Perspective -> Little Planet -> Crystal Ball)
+  const toggleProjectionMode = (mode: PanoramaProjectionMode) => {
+    setProjectionMode(mode)
+    if (mode === 'little_planet') {
+      // Little Planet: stereographic wide nadir view looking directly down
+      fovRef.current = LITTLE_PLANET_FOV
+      pitchRef.current = -88
+    } else if (mode === 'crystal_ball') {
+      // Crystal Ball: inverted stereographic look directly up at zenith
+      fovRef.current = CRYSTAL_BALL_FOV
+      pitchRef.current = 88
+    } else {
+      // Normal Perspective (default)
+      fovRef.current = DEFAULT_PANORAMA_FOV
+      pitchRef.current = initialPitch !== undefined ? initialPitch : 0
+    }
+  }
+
+  // Toggle optional Gyroscope with iOS permission request
+  const toggleGyroscope = async () => {
+    if (gyroActive) {
+      setGyroActive(false)
+      window.removeEventListener('deviceorientation', handleDeviceOrientation)
+      return
+    }
+
+    // iOS 13+ DeviceOrientationEvent permission request
+    const doe = DeviceOrientationEvent as unknown as {
+      requestPermission?: () => Promise<'granted' | 'denied'>
+    }
+    if (typeof doe.requestPermission === 'function') {
+      try {
+        const response = await doe.requestPermission()
+        if (response !== 'granted') {
+          return
+        }
+      } catch (err) {
+        console.warn('Permissão de giroscópio negada ou não suportada:', err)
+        return
+      }
+    }
+
+    gyroBaseRef.current = null
+    gyroYawOffsetRef.current = yawRef.current
+    gyroPitchOffsetRef.current = pitchRef.current
+    setGyroActive(true)
+    window.addEventListener('deviceorientation', handleDeviceOrientation, true)
+  }
+
+  const handleDeviceOrientation = (event: DeviceOrientationEvent) => {
+    if (event.alpha === null || event.beta === null || event.gamma === null) return
+
+    if (!gyroBaseRef.current) {
+      gyroBaseRef.current = {
+        alpha: event.alpha,
+        beta: event.beta,
+        gamma: event.gamma,
+      }
+      return
+    }
+
+    // Alpha: rotation around Z axis (compass heading 0..360)
+    // Beta: front-to-back tilt (-180..180)
+    const deltaAlpha = event.alpha - gyroBaseRef.current.alpha
+    const deltaBeta = event.beta - gyroBaseRef.current.beta
+
+    // Smooth update of yaw and pitch from device orientation
+    if (!isDraggingRef.current) {
+      yawRef.current = (gyroYawOffsetRef.current - deltaAlpha + 360) % 360
+      const newPitch = gyroPitchOffsetRef.current + (deltaBeta - 45) // 45° natural phone holding angle
+      pitchRef.current = Math.max(MIN_PITCH_DEG, Math.min(MAX_PITCH_DEG, newPitch))
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      window.removeEventListener('deviceorientation', handleDeviceOrientation)
+    }
+  }, [])
 
   return (
     <div
@@ -430,7 +574,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
       onWheel={handleWheel}
       style={{ touchAction: 'none' }}
     >
-      {/* Floating On-Screen Zoom & Reset Controls */}
+      {/* Floating On-Screen Controls (Zoom, Reset, Gyroscope & Projection Modes) */}
       <div className="absolute right-4 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-2 no-pan pointer-events-auto">
         <button
           type="button"
@@ -454,12 +598,79 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
           type="button"
           onClick={resetView}
           className="w-10 h-10 rounded-full bg-[rgba(15,23,32,0.78)] hover:bg-[rgba(15,23,32,0.95)] active:scale-95 text-white backdrop-blur-md border border-white/15 flex items-center justify-center shadow-lg transition-transform"
-          title="Redefinir visão panorâmica"
-          aria-label="Redefinir visão panorâmica"
+          title="Redefinir visão frontal (padrão)"
+          aria-label="Redefinir visão frontal"
         >
           <RotateCcw className="w-3.5 h-3.5 text-[#E07A3F]" />
         </button>
+
+        {/* Gyroscope toggle (optional on mobile/touch, never default) */}
+        {hasGyroSupport && (
+          <button
+            type="button"
+            onClick={toggleGyroscope}
+            className={`w-10 h-10 rounded-full backdrop-blur-md border flex items-center justify-center shadow-lg transition-all active:scale-95 ${
+              gyroActive
+                ? 'bg-[#E07A3F] border-white text-white'
+                : 'bg-[rgba(15,23,32,0.78)] hover:bg-[rgba(15,23,32,0.95)] border-white/15 text-white/80'
+            }`}
+            title={gyroActive ? 'Desativar giroscópio' : 'Ativar giroscópio (mover celular)'}
+            aria-label="Controle por giroscópio"
+          >
+            <Smartphone className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* Projection Mode Switcher: Perspective Normal / Little Planet / Crystal Ball (optional, never default) */}
+        <div className="pt-1 flex flex-col gap-1.5 border-t border-white/10 mt-1">
+          <button
+            type="button"
+            onClick={() =>
+              toggleProjectionMode(
+                projectionMode === 'normal'
+                  ? 'little_planet'
+                  : projectionMode === 'little_planet'
+                    ? 'crystal_ball'
+                    : 'normal',
+              )
+            }
+            className={`w-10 h-10 rounded-full backdrop-blur-md border flex items-center justify-center shadow-lg transition-all active:scale-95 ${
+              projectionMode !== 'normal'
+                ? 'bg-[#1F4E5F] border-white text-white'
+                : 'bg-[rgba(15,23,32,0.78)] hover:bg-[rgba(15,23,32,0.95)] border-white/15 text-white/70'
+            }`}
+            title={`Modo de Projeção atual: ${
+              projectionMode === 'normal'
+                ? 'Perspectiva Equiretangular (Padrão Insta360)'
+                : projectionMode === 'little_planet'
+                  ? 'Little Planet (Pequeno Planeta)'
+                  : 'Crystal Ball (Bola de Cristal)'
+            }`}
+            aria-label="Alterar modo de projeção"
+          >
+            {projectionMode === 'normal' && <Eye className="w-4 h-4 text-white" />}
+            {projectionMode === 'little_planet' && <Globe className="w-4 h-4 text-emerald-300" />}
+            {projectionMode === 'crystal_ball' && <Disc className="w-4 h-4 text-cyan-300" />}
+          </button>
+        </div>
       </div>
+
+      {/* Floating active projection mode indicator (when non-standard) */}
+      {projectionMode !== 'normal' && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-black/80 backdrop-blur-md text-white text-xs px-3.5 py-1.5 rounded-full border border-white/20 shadow-xl flex items-center gap-2 pointer-events-auto">
+          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+          <span>
+            {projectionMode === 'little_planet' ? 'Modo Little Planet' : 'Modo Crystal Ball'}
+          </span>
+          <button
+            type="button"
+            onClick={() => toggleProjectionMode('normal')}
+            className="ml-1 text-[11px] underline text-[#E07A3F] hover:text-white"
+          >
+            Voltar ao normal
+          </button>
+        </div>
+      )}
 
       {/* Loading overlay */}
       {(isLoading || !imageLoaded) && (
@@ -487,8 +698,9 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         </div>
       )}
 
-      {/* Interactive Navigation Hotspots mathematically projected onto the sphere */}
+      {/* Interactive Navigation Hotspots mathematically projected onto the sphere (hidden in little planet/crystal ball) */}
       {imageLoaded &&
+        projectionMode === 'normal' &&
         visibleHotspots
           .filter((item) => item.visible)
           .map((item) => {

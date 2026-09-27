@@ -4,6 +4,17 @@ export const DEFAULT_PANORAMA_FOV = 80
 export const MIN_PANORAMA_FOV = 45
 export const MAX_PANORAMA_FOV = 110
 
+// Little Planet & Crystal Ball FOV presets
+export const LITTLE_PLANET_FOV = 135
+export const CRYSTAL_BALL_FOV = 135
+
+// Vertical pitch limits: allows virtually full 180° pan (-89.5° to 89.5°)
+// preserving gimbal clamp to avoid flipping the pole
+export const MIN_PITCH_DEG = -89.5
+export const MAX_PITCH_DEG = 89.5
+
+export type PanoramaProjectionMode = 'normal' | 'little_planet' | 'crystal_ball'
+
 /**
  * Checks if WebGL is supported by the current browser environment.
  */

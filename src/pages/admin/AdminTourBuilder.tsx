@@ -7,6 +7,7 @@ import { navPointsService } from '@/services/navPoints'
 import { hotspotsService } from '@/services/hotspots'
 import { getRoomPanoramaUrl, generateDemoFloorPlan } from '@/lib/panorama-assets'
 import { PanoramaDirectionPicker } from '@/components/tour/PanoramaDirectionPicker'
+import { inspectPanoramaFile, PanoramaInspectionResult } from '@/lib/panorama-xmp'
 import type { Property, Room, NavPoint, Hotspot } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -47,6 +48,8 @@ import {
   Map as MapIcon,
   Eye,
   Check,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -84,6 +87,12 @@ export default function AdminTourBuilder() {
   const [pointPosX, setPointPosX] = useState<number>(50)
   const [pointPosY, setPointPosY] = useState<number>(50)
   const [pointIsEntry, setPointIsEntry] = useState(false)
+  const [pointInitialYaw, setPointInitialYaw] = useState<number>(0)
+  const [pointInitialPitch, setPointInitialPitch] = useState<number>(0)
+  const [pointXmpInspection, setPointXmpInspection] = useState<PanoramaInspectionResult | null>(
+    null,
+  )
+  const [roomXmpInspection, setRoomXmpInspection] = useState<PanoramaInspectionResult | null>(null)
   const [isSavingPoint, setIsSavingPoint] = useState(false)
 
   // Add / Edit Hotspot Modal
@@ -143,6 +152,7 @@ export default function AdminTourBuilder() {
     setRoomDescription('')
     setRoomDimensions('')
     setRoomPanoramaFile(null)
+    setRoomXmpInspection(null)
     setRoomModalOpen(true)
   }
 
@@ -152,6 +162,7 @@ export default function AdminTourBuilder() {
     setRoomDescription(room.description || '')
     setRoomDimensions(room.dimensions || '')
     setRoomPanoramaFile(null)
+    setRoomXmpInspection(null)
     setRoomModalOpen(true)
   }
 
@@ -230,6 +241,9 @@ export default function AdminTourBuilder() {
     setPointPosX(50)
     setPointPosY(50)
     setPointIsEntry(false)
+    setPointInitialYaw(0)
+    setPointInitialPitch(0)
+    setPointXmpInspection(null)
     setPointModalOpen(true)
   }
 
@@ -241,6 +255,9 @@ export default function AdminTourBuilder() {
     setPointPosX(point.pos_x ?? 50)
     setPointPosY(point.pos_y ?? 50)
     setPointIsEntry(!!point.is_entry)
+    setPointInitialYaw(point.initial_yaw ?? 0)
+    setPointInitialPitch(point.initial_pitch ?? 0)
+    setPointXmpInspection(null)
     setPointModalOpen(true)
   }
 
@@ -259,6 +276,8 @@ export default function AdminTourBuilder() {
       formData.append('pos_x', pointPosX.toString())
       formData.append('pos_y', pointPosY.toString())
       formData.append('is_entry', pointIsEntry ? 'true' : 'false')
+      formData.append('initial_yaw', Math.round((pointInitialYaw + 360) % 360).toString())
+      formData.append('initial_pitch', Math.round(pointInitialPitch).toString())
 
       if (pointPanoramaFile) {
         formData.append('panorama_image', pointPanoramaFile)
@@ -762,9 +781,20 @@ export default function AdminTourBuilder() {
                                               Ponto Inicial
                                             </Badge>
                                           )}
+                                          {(pt.initial_yaw !== undefined ||
+                                            pt.initial_pitch !== undefined) && (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-[9px] border-[#1F4E5F]/30 text-[#1F4E5F] h-4 px-1.5"
+                                              title={`Visão frontal padrão: Yaw ${pt.initial_yaw ?? 0}°, Pitch ${pt.initial_pitch ?? 0}°`}
+                                            >
+                                              Visão: {Math.round(pt.initial_yaw ?? 0)}°
+                                            </Badge>
+                                          )}
                                         </div>
                                         <span className="text-[10px] text-[#5B6B76] block">
-                                          Planta: X {pt.pos_x ?? 50}% • Y {pt.pos_y ?? 50}%
+                                          Planta: X {pt.pos_x ?? 50}% • Y {pt.pos_y ?? 50}% •
+                                          Direção inicial: {Math.round(pt.initial_yaw ?? 0)}°
                                         </span>
                                       </div>
                                     </div>
@@ -1057,13 +1087,55 @@ export default function AdminTourBuilder() {
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   className="hidden"
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     if (e.target.files && e.target.files[0]) {
-                      setRoomPanoramaFile(e.target.files[0])
+                      const file = e.target.files[0]
+                      setRoomPanoramaFile(file)
+                      const inspection = await inspectPanoramaFile(file)
+                      setRoomXmpInspection(inspection)
                     }
                   }}
                 />
               </label>
+
+              {/* XMP / 2:1 Validation Feedback for Room */}
+              {roomXmpInspection && (
+                <div
+                  className={`p-3 rounded-xl text-xs space-y-1.5 border ${
+                    roomXmpInspection.isEquirectangular
+                      ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+                      : 'bg-amber-50/90 border-amber-200 text-amber-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold">
+                    {roomXmpInspection.isEquirectangular ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <span>Formato Equiretangular 360° reconhecido</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        <span>Aviso sobre formato da foto</span>
+                      </>
+                    )}
+                  </div>
+                  {roomXmpInspection.warningMessage && (
+                    <p className="text-[11px] text-amber-800">{roomXmpInspection.warningMessage}</p>
+                  )}
+                  {roomXmpInspection.insta360Hint && (
+                    <p className="text-[11px] opacity-90 leading-relaxed font-medium">
+                      {roomXmpInspection.insta360Hint}
+                    </p>
+                  )}
+                  {roomXmpInspection.width && roomXmpInspection.height && (
+                    <div className="text-[10px] text-slate-500 pt-0.5">
+                      Dimensões: {roomXmpInspection.width} × {roomXmpInspection.height}px (proporção{' '}
+                      {roomXmpInspection.aspectRatio?.toFixed(2)}:1)
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <DialogFooter className="pt-4">
@@ -1126,13 +1198,57 @@ export default function AdminTourBuilder() {
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   className="hidden"
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     if (e.target.files && e.target.files[0]) {
-                      setPointPanoramaFile(e.target.files[0])
+                      const file = e.target.files[0]
+                      setPointPanoramaFile(file)
+                      const inspection = await inspectPanoramaFile(file)
+                      setPointXmpInspection(inspection)
                     }
                   }}
                 />
               </label>
+
+              {/* XMP / 2:1 Validation Feedback for Point */}
+              {pointXmpInspection && (
+                <div
+                  className={`p-3 rounded-xl text-xs space-y-1.5 border ${
+                    pointXmpInspection.isEquirectangular
+                      ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+                      : 'bg-amber-50/90 border-amber-200 text-amber-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold">
+                    {pointXmpInspection.isEquirectangular ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <span>Formato Equiretangular 360° reconhecido</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        <span>Aviso sobre formato da foto</span>
+                      </>
+                    )}
+                  </div>
+                  {pointXmpInspection.warningMessage && (
+                    <p className="text-[11px] text-amber-800">
+                      {pointXmpInspection.warningMessage}
+                    </p>
+                  )}
+                  {pointXmpInspection.insta360Hint && (
+                    <p className="text-[11px] opacity-90 leading-relaxed font-medium">
+                      {pointXmpInspection.insta360Hint}
+                    </p>
+                  )}
+                  {pointXmpInspection.width && pointXmpInspection.height && (
+                    <div className="text-[10px] text-slate-500 pt-0.5">
+                      Dimensões: {pointXmpInspection.width} × {pointXmpInspection.height}px
+                      (proporção {pointXmpInspection.aspectRatio?.toFixed(2)}:1)
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between p-3 bg-[#F7F5F2] rounded-xl border border-[#E2E6E9]">
@@ -1145,6 +1261,87 @@ export default function AdminTourBuilder() {
                 </span>
               </div>
               <Switch checked={pointIsEntry} onCheckedChange={setPointIsEntry} />
+            </div>
+
+            {/* Visual Frontal View Setter for this Nav Point */}
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-xs font-semibold text-[#1C2B36] flex items-center gap-1.5">
+                    <Eye className="w-4 h-4 text-[#E07A3F]" />
+                    <span>Visão Frontal Inicial (Padrão Insta360)</span>
+                  </Label>
+                  <p className="text-[11px] text-[#5B6B76]">
+                    Defina para onde o visitante olhará assim que este ponto abrir (mira central).
+                  </p>
+                </div>
+                <span className="text-xs font-mono font-bold text-[#1F4E5F] bg-[#1F4E5F]/10 px-2 py-0.5 rounded-full">
+                  Yaw: {Math.round(pointInitialYaw)}° • Pitch: {Math.round(pointInitialPitch)}°
+                </span>
+              </div>
+
+              {(() => {
+                const pointImgUrl = editingPoint?.panorama_image
+                  ? navPointsService.getFileUrl(editingPoint, editingPoint.panorama_image)
+                  : targetRoomForPoint?.panorama_image
+                    ? roomsService.getFileUrl(targetRoomForPoint, targetRoomForPoint.panorama_image)
+                    : ''
+                const previewUrl = getRoomPanoramaUrl(
+                  targetRoomForPoint?.name || 'Ambiente',
+                  pointImgUrl,
+                  pointName || editingPoint?.name,
+                )
+
+                return (
+                  <div className="space-y-2">
+                    <PanoramaDirectionPicker
+                      imageUrl={previewUrl}
+                      roomName={targetRoomForPoint?.name || 'Ambiente'}
+                      pointName={pointName || editingPoint?.name || 'Ponto'}
+                      direction={pointInitialYaw}
+                      pitch={pointInitialPitch}
+                      onChangeDirection={(deg) => setPointInitialYaw(deg)}
+                      onChangePitch={(pitchVal) => setPointInitialPitch(pitchVal)}
+                      mode="initial_view"
+                    />
+
+                    {/* Quick Degree / Pitch manual controls */}
+                    <div className="bg-[#F7F5F2] p-2.5 rounded-xl border border-[#E2E6E9] space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 space-y-0.5">
+                          <div className="flex justify-between text-[10px] text-[#5B6B76]">
+                            <span>Giro horizontal (Yaw):</span>
+                            <span className="font-bold">{Math.round(pointInitialYaw)}°</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="359"
+                            value={pointInitialYaw}
+                            onChange={(e) => setPointInitialYaw(Number(e.target.value))}
+                            className="w-full accent-[#E07A3F] cursor-pointer"
+                          />
+                        </div>
+
+                        <div className="w-28 space-y-0.5">
+                          <div className="flex justify-between text-[10px] text-[#5B6B76]">
+                            <span>Pitch (Vertical):</span>
+                            <span className="font-bold">{Math.round(pointInitialPitch)}°</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="-80"
+                            max="80"
+                            value={pointInitialPitch}
+                            onChange={(e) => setPointInitialPitch(Number(e.target.value))}
+                            className="w-full accent-[#1F4E5F] cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
 
             <DialogFooter className="pt-4">

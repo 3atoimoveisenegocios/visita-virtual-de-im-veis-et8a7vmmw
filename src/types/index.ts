@@ -25,6 +25,8 @@ export interface Room {
   description?: string
   dimensions?: string
   panorama_image?: string
+  initial_yaw?: number
+  initial_pitch?: number
   created: string
   updated: string
   collectionId?: string
@@ -39,6 +41,8 @@ export interface NavPoint {
   pos_y?: number
   is_entry?: boolean
   order?: number
+  initial_yaw?: number
+  initial_pitch?: number
   created: string
   updated: string
   collectionId?: string

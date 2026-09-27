@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-27T16:54:56.132Z",
+  "generatedAt": "2026-09-27T17:37:25.877Z",
   "collections": [
     {
       "name": "users",
@@ -208,6 +208,18 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "initial_yaw",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "initial_pitch",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -418,6 +430,18 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "initial_yaw",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "initial_pitch",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

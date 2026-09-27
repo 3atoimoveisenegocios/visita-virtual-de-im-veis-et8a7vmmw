@@ -5,10 +5,12 @@ import {
   DEFAULT_PANORAMA_FOV,
   MIN_PANORAMA_FOV,
   MAX_PANORAMA_FOV,
+  MIN_PITCH_DEG,
+  MAX_PITCH_DEG,
   isWebGLAvailable,
   sphericalToVector3,
 } from '@/lib/panorama-spherical'
-import { RotateCw, Compass, ZoomIn, ZoomOut, Info } from 'lucide-react'
+import { RotateCw, Compass, ZoomIn, ZoomOut, Info, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface PanoramaDirectionPickerProps {
@@ -16,9 +18,12 @@ interface PanoramaDirectionPickerProps {
   roomName: string
   pointName?: string
   direction: number
+  pitch?: number
   onChangeDirection: (deg: number) => void
+  onChangePitch?: (deg: number) => void
   connectionType?: 'step' | 'door'
   targetName?: string
+  mode?: 'connection' | 'initial_view'
 }
 
 export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = ({
@@ -26,29 +31,35 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
   roomName,
   pointName,
   direction,
+  pitch = 0,
   onChangeDirection,
+  onChangePitch,
   connectionType = 'step',
   targetName,
+  mode = 'connection',
 }) => {
   const mountRef = useRef<HTMLDivElement>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [webglSupported, setWebglSupported] = useState(true)
 
-  // Current viewing yaw (0..360) and pitch (-80..80)
+  // Current viewing yaw (0..360) and pitch (-89.5..89.5) - full vertical pan
   // Direction directly corresponds to yaw! When user looks at the center crosshair,
   // the compass direction is the center yaw.
   const yawRef = useRef<number>((direction + 360) % 360)
-  const pitchRef = useRef<number>(0)
+  const pitchRef = useRef<number>(Math.max(MIN_PITCH_DEG, Math.min(MAX_PITCH_DEG, pitch)))
   const fovRef = useRef<number>(DEFAULT_PANORAMA_FOV)
 
-  // Sync yawRef when direction changes from external (e.g. numeric input or slider)
+  // Sync yawRef & pitchRef when direction/pitch changes from external (e.g. numeric input or slider)
   useEffect(() => {
     const diff = Math.abs((yawRef.current - direction + 360) % 360)
     if (diff > 1 && diff < 359 && !isDraggingRef.current) {
       yawRef.current = (direction + 360) % 360
     }
-  }, [direction])
+    if (!isDraggingRef.current && Math.abs(pitchRef.current - pitch) > 0.5) {
+      pitchRef.current = Math.max(MIN_PITCH_DEG, Math.min(MAX_PITCH_DEG, pitch))
+    }
+  }, [direction, pitch])
 
   // Drag interaction state and touch pinch
   const isDraggingRef = useRef<boolean>(false)
@@ -305,13 +316,18 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
 
     // Invert horizontal drag so dragging left looks right (standard camera pan)
     const newYaw = (yawRef.current - deltaYaw + 360) % 360
+    const newPitch = Math.max(MIN_PITCH_DEG, Math.min(MAX_PITCH_DEG, pitchRef.current + deltaPitch))
+
     yawRef.current = newYaw
-    pitchRef.current = Math.max(-80, Math.min(80, pitchRef.current + deltaPitch))
+    pitchRef.current = newPitch
 
     lastMousePosRef.current = { x: e.clientX, y: e.clientY }
 
     const roundedDeg = Math.round(newYaw) % 360
     onChangeDirection(roundedDeg)
+    if (onChangePitch) {
+      onChangePitch(Math.round(newPitch))
+    }
   }
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -329,6 +345,9 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
         isDraggingRef.current = false
         const roundedDeg = Math.round(yawRef.current) % 360
         onChangeDirection(roundedDeg)
+        if (onChangePitch) {
+          onChangePitch(Math.round(pitchRef.current))
+        }
       }
     }
 
@@ -352,6 +371,13 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
     const nextYaw = (yawRef.current + degDelta + 360) % 360
     yawRef.current = nextYaw
     onChangeDirection(Math.round(nextYaw) % 360)
+  }
+
+  const resetInitialView = () => {
+    yawRef.current = 0
+    pitchRef.current = 0
+    onChangeDirection(0)
+    if (onChangePitch) onChangePitch(0)
   }
 
   const zoomBy = (fovDelta: number) => {
@@ -411,10 +437,11 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
           {pointName && <span className="text-white/60">• {pointName}</span>}
         </div>
 
-        {/* Top Right: Degree readout pill */}
+        {/* Top Right: Degree & Pitch readout pill */}
         <div className="absolute top-3 right-3 z-10 bg-black/75 backdrop-blur-md text-white text-xs font-mono font-bold px-3 py-1.5 rounded-full border border-white/20 shadow pointer-events-none flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-[#E07A3F] animate-pulse" />
-          <span>{Math.round(direction)}°</span>
+          <span>Yaw: {Math.round(direction)}°</span>
+          {onChangePitch && <span className="text-white/70">• Pitch: {Math.round(pitch)}°</span>}
           <span className="text-[10px] font-normal text-white/70">
             ({getCardinalName(direction).split(' ')[0]})
           </span>
@@ -423,8 +450,8 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
         {/* CENTER CROSSHAIR / ARROW TARGET (The visual reference) */}
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
           {/* Subtle horizontal alignment line across viewer */}
-          <div className="absolute w-full h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-          <div className="absolute h-full w-[1px] bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+          <div className="absolute w-full h-[1px] bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+          <div className="absolute h-full w-[1px] bg-gradient-to-b from-transparent via-white/25 to-transparent" />
 
           {/* Target Reticle & Indicator */}
           <div className="relative flex flex-col items-center justify-center -translate-y-2">
@@ -434,8 +461,20 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
               <span className="text-[#E07A3F]">▼</span>
             </div>
 
-            {/* Target indicator icon matching tour look */}
-            {isStep ? (
+            {mode === 'initial_view' ? (
+              /* Initial Frontal View Reticle (Insta360 camera look) */
+              <div className="relative flex flex-col items-center">
+                <div className="relative w-14 h-14 flex items-center justify-center">
+                  <div className="absolute w-14 h-14 rounded-full border-2 border-dashed border-[#E07A3F] animate-spin" />
+                  <div className="w-10 h-10 rounded-full bg-[#1F4E5F]/90 border-2 border-white text-white flex items-center justify-center shadow-xl">
+                    <Eye className="w-5 h-5 text-[#E07A3F]" />
+                  </div>
+                </div>
+                <div className="mt-1 bg-black/85 backdrop-blur-md text-white text-[11px] font-semibold px-2.5 py-1 rounded-full border border-white/25 shadow-lg whitespace-nowrap">
+                  Visão Frontal Padrão
+                </div>
+              </div>
+            ) : isStep ? (
               /* Street View step disc */
               <div className="relative flex flex-col items-center">
                 <div className="relative w-16 h-12 flex items-center justify-center">
@@ -489,7 +528,11 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
         <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-between pointer-events-none">
           <div className="bg-black/75 backdrop-blur-md text-white text-[11px] px-2.5 py-1 rounded-lg border border-white/10 flex items-center gap-1.5 shadow">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span>Arraste o panorama esférico até a mira apontar para o destino</span>
+            <span>
+              {mode === 'initial_view'
+                ? 'Arraste o panorama até a mira central ficar na direção inicial de abertura'
+                : 'Arraste o panorama esférico até a mira apontar para o destino'}
+            </span>
           </div>
 
           {/* Quick viewer controls on the bottom-right */}
@@ -534,6 +577,18 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </Button>
+            {mode === 'initial_view' && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={resetInitialView}
+                className="h-7 px-2 text-[10px] bg-black/70 hover:bg-black/90 text-[#E07A3F] font-bold rounded-lg border border-white/15"
+                title="Zerar orientação inicial (Norte 0°)"
+              >
+                0°
+              </Button>
+            )}
           </div>
         </div>
       </div>
