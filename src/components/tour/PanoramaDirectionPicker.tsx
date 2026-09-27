@@ -195,7 +195,11 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
         return
       }
 
-      texture.mapping = THREE.EquirectangularReflectionMapping
+      // Standard UV mapping onto the inside of the SphereGeometry.
+      // Do NOT set texture.mapping = THREE.EquirectangularReflectionMapping,
+      // because ReflectionMapping recomputes texture coordinates based on camera view
+      // direction / reflection vectors, which causes severe distortion and zooming
+      // when rotating left or right!
       texture.colorSpace = THREE.SRGBColorSpace
       texture.minFilter = THREE.LinearMipmapLinearFilter
       texture.magFilter = THREE.LinearFilter
