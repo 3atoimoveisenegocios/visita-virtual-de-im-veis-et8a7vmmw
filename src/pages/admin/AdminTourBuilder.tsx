@@ -358,7 +358,7 @@ export default function AdminTourBuilder() {
         let autoHotspotCreated = false
         if (originPoint) {
           try {
-            // Verificar se já existe conexão direta entre o ponto de origem e o novo ponto (evitar duplicata)
+            // Verificar no estado local E se necessário consultar para evitar duplicatas
             const alreadyExists = hotspots.some(
               (h) =>
                 h.room === targetRoomForPoint.id &&
@@ -385,6 +385,7 @@ export default function AdminTourBuilder() {
               }
 
               const defaultPitch = -16
+              // Conexão direta de deslocamento (origem -> novo ponto)
               const autoHotspot = await hotspotsService.createHotspot({
                 room: targetRoomForPoint.id,
                 target_room: targetRoomForPoint.id,
@@ -394,8 +395,8 @@ export default function AdminTourBuilder() {
                 pitch: defaultPitch,
                 type: 'step',
                 label: `Ir para ${created.name}`,
-                arrow_size_desktop: 'medio',
-                arrow_size_mobile: 'medio',
+                arrow_size_desktop: 'pequeno',
+                arrow_size_mobile: 'pequeno',
                 arrow_orientation: 'reta',
                 arrow_rotation: 0,
               })
@@ -412,6 +413,48 @@ export default function AdminTourBuilder() {
 
               setHotspots((prev) => [...prev, autoHotspotWithExpand])
               autoHotspotCreated = true
+
+              // Também criar conexão reversa automática (do novo ponto voltando para a origem),
+              // se ainda não existir, para permitir navegar e voltar pelo panorama
+              try {
+                const returnExists = hotspots.some(
+                  (h) =>
+                    h.room === targetRoomForPoint.id &&
+                    h.nav_point === created.id &&
+                    h.target_nav_point === originPoint.id,
+                )
+                if (!returnExists) {
+                  const returnDirection = Math.round((calculatedDirection + 180) % 360)
+                  const returnHotspot = await hotspotsService.createHotspot({
+                    room: targetRoomForPoint.id,
+                    target_room: targetRoomForPoint.id,
+                    nav_point: created.id,
+                    target_nav_point: originPoint.id,
+                    direction: returnDirection,
+                    pitch: defaultPitch,
+                    type: 'step',
+                    label: `Voltar para ${originPoint.name}`,
+                    arrow_size_desktop: 'pequeno',
+                    arrow_size_mobile: 'pequeno',
+                    arrow_orientation: 'reta',
+                    arrow_rotation: 0,
+                  })
+                  setHotspots((prev) => [
+                    ...prev,
+                    {
+                      ...returnHotspot,
+                      expand: {
+                        room: targetRoomForPoint,
+                        target_room: targetRoomForPoint,
+                        nav_point: created,
+                        target_nav_point: originPoint,
+                      },
+                    },
+                  ])
+                }
+              } catch (returnErr) {
+                console.warn('Aviso: Conexão de retorno automática não criada:', returnErr)
+              }
             }
           } catch (autoErr: any) {
             // Se a criação da conexão falhar, o salvamento do ponto não deve falhar
