@@ -93,6 +93,11 @@ export default function AdminTourBuilder() {
   const [pointIsEntry, setPointIsEntry] = useState(false)
   const [pointInitialYaw, setPointInitialYaw] = useState<number>(0)
   const [pointInitialPitch, setPointInitialPitch] = useState<number>(0)
+  const [pointSizeDesktop, setPointSizeDesktop] = useState<'pequeno' | 'medio' | 'grande'>('medio')
+  const [pointSizeMobile, setPointSizeMobile] = useState<'pequeno' | 'medio' | 'grande'>('medio')
+  const [pointPreviewDeviceMode, setPointPreviewDeviceMode] = useState<'desktop' | 'mobile'>(
+    'desktop',
+  )
   const [pointXmpInspection, setPointXmpInspection] = useState<PanoramaInspectionResult | null>(
     null,
   )
@@ -257,6 +262,9 @@ export default function AdminTourBuilder() {
     setPointIsEntry(false)
     setPointInitialYaw(0)
     setPointInitialPitch(0)
+    setPointSizeDesktop('medio')
+    setPointSizeMobile('medio')
+    setPointPreviewDeviceMode('desktop')
     setPointXmpInspection(null)
     setPointModalOpen(true)
   }
@@ -271,6 +279,9 @@ export default function AdminTourBuilder() {
     setPointIsEntry(!!point.is_entry)
     setPointInitialYaw(point.initial_yaw ?? 0)
     setPointInitialPitch(point.initial_pitch ?? 0)
+    setPointSizeDesktop(point.point_size_desktop || 'medio')
+    setPointSizeMobile(point.point_size_mobile || 'medio')
+    setPointPreviewDeviceMode('desktop')
     setPointXmpInspection(null)
     setPointModalOpen(true)
   }
@@ -292,6 +303,8 @@ export default function AdminTourBuilder() {
       formData.append('is_entry', pointIsEntry ? 'true' : 'false')
       formData.append('initial_yaw', Math.round((pointInitialYaw + 360) % 360).toString())
       formData.append('initial_pitch', Math.round(pointInitialPitch).toString())
+      formData.append('point_size_desktop', pointSizeDesktop)
+      formData.append('point_size_mobile', pointSizeMobile)
 
       if (pointPanoramaFile) {
         formData.append('panorama_image', pointPanoramaFile)
@@ -300,6 +313,24 @@ export default function AdminTourBuilder() {
       if (editingPoint) {
         const updated = await navPointsService.updateNavPoint(editingPoint.id, formData)
         setNavPoints((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+        // Also update any hotspots that expand this target nav point
+        setHotspots((prev) =>
+          prev.map((h) => {
+            if (
+              h.target_nav_point === updated.id ||
+              h.expand?.target_nav_point?.id === updated.id
+            ) {
+              return {
+                ...h,
+                expand: {
+                  ...h.expand,
+                  target_nav_point: updated,
+                },
+              }
+            }
+            return h
+          }),
+        )
         toast.success(`Ponto "${updated.name}" atualizado!`)
       } else {
         const roomPts = navPoints.filter((p) => p.room === targetRoomForPoint.id)
@@ -845,7 +876,9 @@ export default function AdminTourBuilder() {
                                         </div>
                                         <span className="text-[10px] text-[#5B6B76] block">
                                           Planta: X {pt.pos_x ?? 50}% • Y {pt.pos_y ?? 50}% •
-                                          Direção inicial: {Math.round(pt.initial_yaw ?? 0)}°
+                                          Direção inicial: {Math.round(pt.initial_yaw ?? 0)}° • Tam:
+                                          D:{pt.point_size_desktop?.[0] || 'm'} M:
+                                          {pt.point_size_mobile?.[0] || 'm'}
                                         </span>
                                       </div>
                                     </div>
@@ -1233,7 +1266,7 @@ export default function AdminTourBuilder() {
 
       {/* ================= MODAL: ADICIONAR / EDITAR PONTO STREET VIEW ================= */}
       <Dialog open={pointModalOpen} onOpenChange={setPointModalOpen}>
-        <DialogContent className="sm:max-w-md bg-white text-[#1C2B36] rounded-2xl">
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto bg-white text-[#1C2B36] rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold">
               {editingPoint ? 'Editar Ponto de Visão' : 'Novo Ponto de Visão Street View'}
@@ -1339,6 +1372,90 @@ export default function AdminTourBuilder() {
               <Switch checked={pointIsEntry} onCheckedChange={setPointIsEntry} />
             </div>
 
+            {/* CONTROLES DE TAMANHO DO PONTO DE VISÃO (Desktop e Celular) */}
+            <div className="bg-white p-3.5 rounded-xl border border-[#E2E6E9] space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">🎯</span>
+                  <span className="text-xs font-bold text-[#1C2B36]">
+                    Tamanho do Ponto de Visão
+                  </span>
+                </div>
+                <span className="text-[10px] text-[#5B6B76]">
+                  Padrão: médio para melhor equilíbrio
+                </span>
+              </div>
+
+              {/* Tamanhos separados: Desktop e Celular */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Tamanho Desktop */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-[#1C2B36] flex items-center justify-between">
+                    <span>Tamanho no Desktop / Computador</span>
+                    <span className="text-[10px] font-normal text-[#5B6B76]">
+                      {pointSizeDesktop === 'pequeno'
+                        ? 'Pequena'
+                        : pointSizeDesktop === 'medio'
+                          ? 'Média'
+                          : 'Grande'}
+                    </span>
+                  </Label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(['pequeno', 'medio', 'grande'] as const).map((sz) => (
+                      <button
+                        key={`point-desktop-${sz}`}
+                        type="button"
+                        onClick={() => {
+                          setPointSizeDesktop(sz)
+                          setPointPreviewDeviceMode('desktop')
+                        }}
+                        className={`py-1.5 px-2 text-xs font-medium rounded-lg border text-center transition-all ${
+                          pointSizeDesktop === sz
+                            ? 'bg-[#1F4E5F] text-white border-[#1F4E5F] shadow-xs font-bold'
+                            : 'bg-white text-[#5B6B76] border-[#E2E6E9] hover:bg-slate-50'
+                        }`}
+                      >
+                        {sz === 'pequeno' ? 'Pequena' : sz === 'medio' ? 'Média' : 'Grande'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tamanho Celular */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-[#1C2B36] flex items-center justify-between">
+                    <span>Tamanho no Celular / Mobile</span>
+                    <span className="text-[10px] font-normal text-[#5B6B76]">
+                      {pointSizeMobile === 'pequeno'
+                        ? 'Pequena'
+                        : pointSizeMobile === 'medio'
+                          ? 'Média'
+                          : 'Grande'}
+                    </span>
+                  </Label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(['pequeno', 'medio', 'grande'] as const).map((sz) => (
+                      <button
+                        key={`point-mobile-${sz}`}
+                        type="button"
+                        onClick={() => {
+                          setPointSizeMobile(sz)
+                          setPointPreviewDeviceMode('mobile')
+                        }}
+                        className={`py-1.5 px-2 text-xs font-medium rounded-lg border text-center transition-all ${
+                          pointSizeMobile === sz
+                            ? 'bg-[#E07A3F] text-white border-[#E07A3F] shadow-xs font-bold'
+                            : 'bg-white text-[#5B6B76] border-[#E2E6E9] hover:bg-slate-50'
+                        }`}
+                      >
+                        {sz === 'pequeno' ? 'Pequena' : sz === 'medio' ? 'Média' : 'Grande'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Visual Frontal View Setter for this Nav Point */}
             <div className="space-y-2 pt-2 border-t border-slate-100">
               <div className="flex items-center justify-between">
@@ -1372,6 +1489,42 @@ export default function AdminTourBuilder() {
 
                 return (
                   <div className="space-y-2">
+                    {/* Device preview switch for point viewer */}
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[11px] text-[#5B6B76]">
+                        Tamanho do marcador:{' '}
+                        <strong className="text-[#1C2B36]">
+                          {pointPreviewDeviceMode === 'desktop'
+                            ? `Desktop (${pointSizeDesktop})`
+                            : `Mobile (${pointSizeMobile})`}
+                        </strong>
+                      </span>
+                      <div className="inline-flex rounded-lg border border-[#E2E6E9] p-0.5 bg-slate-50 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setPointPreviewDeviceMode('desktop')}
+                          className={`px-2.5 py-0.5 rounded-md font-medium transition-all ${
+                            pointPreviewDeviceMode === 'desktop'
+                              ? 'bg-[#1F4E5F] text-white shadow-xs'
+                              : 'text-[#5B6B76] hover:text-[#1C2B36]'
+                          }`}
+                        >
+                          💻 Desktop
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPointPreviewDeviceMode('mobile')}
+                          className={`px-2.5 py-0.5 rounded-md font-medium transition-all ${
+                            pointPreviewDeviceMode === 'mobile'
+                              ? 'bg-[#E07A3F] text-white shadow-xs'
+                              : 'text-[#5B6B76] hover:text-[#1C2B36]'
+                          }`}
+                        >
+                          📱 Mobile
+                        </button>
+                      </div>
+                    </div>
+
                     <PanoramaDirectionPicker
                       imageUrl={previewUrl}
                       roomName={targetRoomForPoint?.name || 'Ambiente'}
@@ -1381,6 +1534,9 @@ export default function AdminTourBuilder() {
                       onChangeDirection={(deg) => setPointInitialYaw(deg)}
                       onChangePitch={(pitchVal) => setPointInitialPitch(pitchVal)}
                       mode="initial_view"
+                      arrowSize={
+                        pointPreviewDeviceMode === 'desktop' ? pointSizeDesktop : pointSizeMobile
+                      }
                     />
 
                     {/* Quick Degree / Pitch manual controls */}

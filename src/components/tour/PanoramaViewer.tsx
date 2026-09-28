@@ -11,13 +11,13 @@ import {
   projectSphericalToScreen,
   sphericalToVector3,
 } from '@/lib/panorama-spherical'
-import type { Hotspot, ArrowSize, ArrowOrientation } from '@/types'
+import type { Hotspot, ArrowSize, PointSize, ArrowOrientation } from '@/types'
 import { ChevronRight, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { useIsMobile } from '@/hooks/use-mobile'
 
 // Scale factor and CSS sizes according to ArrowSize ('pequeno' | 'medio' | 'grande')
 // Default is now 'pequeno' (smaller by default to not clutter the view)
-export function getArrowSizeStyles(size: ArrowSize = 'pequeno') {
+export function getArrowSizeStyles(size: ArrowSize | PointSize = 'pequeno') {
   switch (size) {
     case 'grande':
       return {
@@ -769,10 +769,15 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
                 {isStep
                   ? /* Street View style displacement arrow / floor disc */
                     (() => {
-                      const arrowSizeConfig = isMobile
-                        ? item.hotspot.arrow_size_mobile || 'pequeno'
-                        : item.hotspot.arrow_size_desktop || 'pequeno'
-                      const sizeStyles = getArrowSizeStyles(arrowSizeConfig)
+                      const targetNavPoint = item.hotspot.expand?.target_nav_point
+                      const effectiveSize: PointSize | ArrowSize = targetNavPoint
+                        ? isMobile
+                          ? targetNavPoint.point_size_mobile || 'medio'
+                          : targetNavPoint.point_size_desktop || 'medio'
+                        : isMobile
+                          ? item.hotspot.arrow_size_mobile || 'pequeno'
+                          : item.hotspot.arrow_size_desktop || 'pequeno'
+                      const sizeStyles = getArrowSizeStyles(effectiveSize)
                       const arrowRotationDeg = getArrowRotationDegrees(
                         item.hotspot.arrow_orientation,
                         item.hotspot.arrow_rotation,

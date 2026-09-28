@@ -12,7 +12,7 @@ import {
 } from '@/lib/panorama-spherical'
 import { RotateCw, Compass, ZoomIn, ZoomOut, Info, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { ArrowSize, ArrowOrientation } from '@/types'
+import type { ArrowSize, PointSize, ArrowOrientation } from '@/types'
 import { getArrowSizeStyles, getArrowRotationDegrees } from '@/components/tour/PanoramaViewer'
 
 interface PanoramaDirectionPickerProps {
@@ -26,7 +26,7 @@ interface PanoramaDirectionPickerProps {
   connectionType?: 'step' | 'door'
   targetName?: string
   mode?: 'connection' | 'initial_view'
-  arrowSize?: ArrowSize
+  arrowSize?: ArrowSize | PointSize
   arrowOrientation?: ArrowOrientation
   arrowRotation?: number
 }
@@ -523,100 +523,115 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
               <span className="text-[#E07A3F]">▼</span>
             </div>
 
-            {mode === 'initial_view' ? (
-              /* Initial Frontal View Reticle (Insta360 camera look) */
-              <div className="relative flex flex-col items-center">
-                <div className="relative w-14 h-14 flex items-center justify-center">
-                  <div className="absolute w-14 h-14 rounded-full border-2 border-dashed border-[#E07A3F] animate-spin" />
-                  <div className="w-10 h-10 rounded-full bg-[#1F4E5F]/90 border-2 border-white text-white flex items-center justify-center shadow-xl">
-                    <Eye className="w-5 h-5 text-[#E07A3F]" />
-                  </div>
-                </div>
-                <div className="mt-1 bg-black/85 backdrop-blur-md text-white text-[11px] font-semibold px-2.5 py-1 rounded-full border border-white/25 shadow-lg whitespace-nowrap">
-                  Visão Frontal Padrão
-                </div>
-              </div>
-            ) : isStep ? (
-              /* Street View step disc */
-              (() => {
-                const sizeStyles = getArrowSizeStyles(arrowSize)
-                const arrowRotationDeg = getArrowRotationDegrees(arrowOrientation, arrowRotation)
-
-                return (
-                  <div className="relative flex flex-col items-center">
-                    <div
-                      className={`relative ${sizeStyles.discWidth} ${sizeStyles.discHeight} flex items-center justify-center`}
-                    >
-                      <div
-                        className={`absolute ${sizeStyles.discHaloWidth} ${sizeStyles.discHaloHeight} rounded-[100%] bg-[#E07A3F]/35 border-2 border-white shadow-[0_0_12px_rgba(224,122,63,0.8)] animate-pulse`}
-                      />
-                      <div
-                        className={`relative z-10 ${sizeStyles.arrowBtnSize} rounded-full bg-[#E07A3F] text-white flex items-center justify-center shadow-xl border-2 border-white`}
-                      >
-                        <svg
-                          className={`${sizeStyles.iconSize} text-white transition-transform`}
-                          style={{
-                            transform: `rotate(${arrowRotationDeg}deg)`,
-                          }}
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="3.2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+            {mode === 'initial_view'
+              ? /* Initial Frontal View Reticle (Insta360 camera look) */
+                (() => {
+                  const sizeStyles = getArrowSizeStyles(arrowSize)
+                  return (
+                    <div className="relative flex flex-col items-center">
+                      <div className="relative flex items-center justify-center">
+                        <div
+                          className={`absolute ${sizeStyles.doorPulseSize} rounded-full border-2 border-dashed border-[#E07A3F] animate-spin`}
+                        />
+                        <div
+                          className={`${sizeStyles.doorBtnSize} rounded-full bg-[#1F4E5F]/90 border-2 border-white text-white flex items-center justify-center shadow-xl transition-all`}
                         >
-                          <path d="M12 19V5M5 12l7-7 7 7" />
-                        </svg>
+                          <Eye className={`${sizeStyles.doorIconSize} text-[#E07A3F]`} />
+                        </div>
+                      </div>
+                      <div
+                        className={`mt-1 bg-black/85 backdrop-blur-md text-white ${sizeStyles.tooltipText} font-semibold rounded-full border border-white/25 shadow-lg whitespace-nowrap`}
+                      >
+                        Visão Frontal Padrão
                       </div>
                     </div>
-                    <div
-                      className={`mt-0.5 bg-black/85 backdrop-blur-md text-white ${sizeStyles.tooltipText} font-semibold rounded-full border border-white/25 shadow-lg whitespace-nowrap`}
-                    >
-                      {targetName || 'Próximo passo aqui'}
-                    </div>
-                  </div>
-                )
-              })()
-            ) : (
-              /* Door / Exit circular hotspot with live arrow size and rotation */
-              (() => {
-                const sizeStyles = getArrowSizeStyles(arrowSize)
-                const arrowRotationDeg = getArrowRotationDegrees(arrowOrientation, arrowRotation)
+                  )
+                })()
+              : isStep
+                ? /* Street View step disc */
+                  (() => {
+                    const sizeStyles = getArrowSizeStyles(arrowSize)
+                    const arrowRotationDeg = getArrowRotationDegrees(
+                      arrowOrientation,
+                      arrowRotation,
+                    )
 
-                return (
-                  <div className="relative flex flex-col items-center">
-                    <div className="relative flex items-center justify-center">
-                      <div
-                        className={`absolute ${sizeStyles.doorPulseSize} rounded-full bg-[#1F4E5F]/40 animate-ping`}
-                      />
-                      <div
-                        className={`${sizeStyles.doorBtnSize} rounded-full bg-[#1F4E5F] border-2 border-white text-white flex items-center justify-center shadow-2xl`}
-                      >
-                        <svg
-                          className={`${sizeStyles.doorIconSize} text-white transition-transform`}
-                          style={{
-                            transform: `rotate(${arrowRotationDeg}deg)`,
-                          }}
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                    return (
+                      <div className="relative flex flex-col items-center">
+                        <div
+                          className={`relative ${sizeStyles.discWidth} ${sizeStyles.discHeight} flex items-center justify-center`}
                         >
-                          <path d="M12 19V5M5 12l7-7 7 7" />
-                        </svg>
+                          <div
+                            className={`absolute ${sizeStyles.discHaloWidth} ${sizeStyles.discHaloHeight} rounded-[100%] bg-[#E07A3F]/35 border-2 border-white shadow-[0_0_12px_rgba(224,122,63,0.8)] animate-pulse`}
+                          />
+                          <div
+                            className={`relative z-10 ${sizeStyles.arrowBtnSize} rounded-full bg-[#E07A3F] text-white flex items-center justify-center shadow-xl border-2 border-white`}
+                          >
+                            <svg
+                              className={`${sizeStyles.iconSize} text-white transition-transform`}
+                              style={{
+                                transform: `rotate(${arrowRotationDeg}deg)`,
+                              }}
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="3.2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M12 19V5M5 12l7-7 7 7" />
+                            </svg>
+                          </div>
+                        </div>
+                        <div
+                          className={`mt-0.5 bg-black/85 backdrop-blur-md text-white ${sizeStyles.tooltipText} font-semibold rounded-full border border-white/25 shadow-lg whitespace-nowrap`}
+                        >
+                          {targetName || 'Próximo passo aqui'}
+                        </div>
                       </div>
-                    </div>
-                    <div
-                      className={`mt-1 bg-black/85 backdrop-blur-md text-white ${sizeStyles.tooltipText} font-semibold rounded-full border border-white/25 shadow-lg whitespace-nowrap`}
-                    >
-                      {targetName || 'Saída / Porta aqui'}
-                    </div>
-                  </div>
-                )
-              })()
-            )}
+                    )
+                  })()
+                : /* Door / Exit circular hotspot with live arrow size and rotation */
+                  (() => {
+                    const sizeStyles = getArrowSizeStyles(arrowSize)
+                    const arrowRotationDeg = getArrowRotationDegrees(
+                      arrowOrientation,
+                      arrowRotation,
+                    )
+
+                    return (
+                      <div className="relative flex flex-col items-center">
+                        <div className="relative flex items-center justify-center">
+                          <div
+                            className={`absolute ${sizeStyles.doorPulseSize} rounded-full bg-[#1F4E5F]/40 animate-ping`}
+                          />
+                          <div
+                            className={`${sizeStyles.doorBtnSize} rounded-full bg-[#1F4E5F] border-2 border-white text-white flex items-center justify-center shadow-2xl`}
+                          >
+                            <svg
+                              className={`${sizeStyles.doorIconSize} text-white transition-transform`}
+                              style={{
+                                transform: `rotate(${arrowRotationDeg}deg)`,
+                              }}
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M12 19V5M5 12l7-7 7 7" />
+                            </svg>
+                          </div>
+                        </div>
+                        <div
+                          className={`mt-1 bg-black/85 backdrop-blur-md text-white ${sizeStyles.tooltipText} font-semibold rounded-full border border-white/25 shadow-lg whitespace-nowrap`}
+                        >
+                          {targetName || 'Saída / Porta aqui'}
+                        </div>
+                      </div>
+                    )
+                  })()}
           </div>
         </div>
 
