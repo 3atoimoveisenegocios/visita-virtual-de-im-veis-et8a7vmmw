@@ -343,7 +343,7 @@ export default function AdminTourBuilder() {
         const created = await navPointsService.createNavPoint(formData)
         setNavPoints((prev) => [...prev, created])
 
-        // Determinar o ponto de visão atual/origem para conectar a seta automaticamente
+        // Determinar o ponto de visão atual/origem para conectar a seta automaticamente:
         // 1. Ponto ativo de onde o usuário abriu a criação (activeSourcePointForNewPoint)
         // 2. Ou ponto marcado como entrada do cômodo (is_entry)
         // 3. Ou o primeiro ponto de visão existente no cômodo
@@ -358,7 +358,7 @@ export default function AdminTourBuilder() {
         let autoHotspotCreated = false
         if (originPoint) {
           try {
-            // Verificar se já existe conexão direta entre o ponto de origem e o novo ponto
+            // Verificar se já existe conexão direta entre o ponto de origem e o novo ponto (evitar duplicata)
             const alreadyExists = hotspots.some(
               (h) =>
                 h.room === targetRoomForPoint.id &&
@@ -367,14 +367,30 @@ export default function AdminTourBuilder() {
             )
 
             if (!alreadyExists) {
+              // Calcular direção (yaw) no plano da planta baixa se ambos os pontos tiverem pos_x e pos_y
+              let calculatedDirection = originPoint.initial_yaw ?? 0
+              if (
+                typeof originPoint.pos_x === 'number' &&
+                typeof originPoint.pos_y === 'number' &&
+                typeof created.pos_x === 'number' &&
+                typeof created.pos_y === 'number' &&
+                (originPoint.pos_x !== created.pos_x || originPoint.pos_y !== created.pos_y)
+              ) {
+                const dx = created.pos_x - originPoint.pos_x
+                const dy = created.pos_y - originPoint.pos_y
+                // Em coordenadas de tela / planta: x vai pra direita (Leste = 90°), y vai pra baixo (Sul = 180°)
+                // Math.atan2(dx, -dy) dá 0 para cima (Norte), 90 para direita (Leste)
+                let deg = Math.round((Math.atan2(dx, -dy) * 180) / Math.PI)
+                calculatedDirection = (deg + 360) % 360
+              }
+
               const defaultPitch = -16
-              const defaultDirection = originPoint.initial_yaw ?? 0
               const autoHotspot = await hotspotsService.createHotspot({
                 room: targetRoomForPoint.id,
                 target_room: targetRoomForPoint.id,
                 nav_point: originPoint.id,
                 target_nav_point: created.id,
-                direction: Math.round((defaultDirection + 360) % 360),
+                direction: Math.round((calculatedDirection + 360) % 360),
                 pitch: defaultPitch,
                 type: 'step',
                 label: `Ir para ${created.name}`,
@@ -398,8 +414,7 @@ export default function AdminTourBuilder() {
               autoHotspotCreated = true
             }
           } catch (autoErr: any) {
-            // Se a criação automática da conexão falhar por qualquer motivo,
-            // o salvamento do ponto NÃO deve falhar — apenas registrar aviso e seguir.
+            // Se a criação da conexão falhar, o salvamento do ponto não deve falhar
             console.warn(
               'Aviso: Não foi possível criar automaticamente a conexão para o novo ponto:',
               autoErr,
