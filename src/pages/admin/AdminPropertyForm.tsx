@@ -185,31 +185,61 @@ export default function AdminPropertyForm() {
     }
   }
 
-  // Cleanup preview audio when unmounting or changing source
+  // Helper to safely stop and reset preview audio, removing error/ended listeners beforehand
+  const stopAndResetPreviewAudio = React.useCallback(() => {
+    const audio = previewAudioRef.current
+    if (!audio) return
+
+    // Desconecta listeners antes de pausar/limpar a fonte para evitar disparar falso erro no unmount
+    audio.onerror = null
+    audio.onended = null
+    try {
+      audio.pause()
+    } catch {
+      // Ignorar eventuais exceções ao pausar
+    }
+    try {
+      audio.removeAttribute('src')
+      audio.load()
+    } catch {
+      // Ignorar se o navegador não suportar load após removeAttribute
+    }
+    previewAudioRef.current = null
+    setIsPlayingPreview(false)
+  }, [])
+
+  // Cleanup preview audio when unmounting
   useEffect(() => {
     return () => {
-      if (previewAudioRef.current) {
-        previewAudioRef.current.pause()
-        previewAudioRef.current.src = ''
-        previewAudioRef.current = null
-      }
+      stopAndResetPreviewAudio()
     }
-  }, [])
+  }, [stopAndResetPreviewAudio])
+
+  const attachAudioListeners = (audio: HTMLAudioElement) => {
+    audio.onended = () => {
+      setIsPlayingPreview(false)
+    }
+    audio.onerror = () => {
+      setIsPlayingPreview(false)
+      toast.error('Erro ao reproduzir o arquivo de áudio.')
+    }
+  }
 
   const togglePlayAudioPreview = (audioSrc: string) => {
     if (!previewAudioRef.current) {
-      previewAudioRef.current = new Audio(audioSrc)
-      previewAudioRef.current.onended = () => {
-        setIsPlayingPreview(false)
-      }
-      previewAudioRef.current.onerror = () => {
-        setIsPlayingPreview(false)
-        toast.error('Erro ao reproduzir o arquivo de áudio.')
-      }
+      const audio = new Audio()
+      attachAudioListeners(audio)
+      audio.src = audioSrc
+      previewAudioRef.current = audio
     } else if (previewAudioRef.current.src !== audioSrc) {
-      previewAudioRef.current.pause()
-      previewAudioRef.current.src = audioSrc
-      previewAudioRef.current.currentTime = 0
+      const audio = previewAudioRef.current
+      // Remove listeners antes de alterar a fonte
+      audio.onerror = null
+      audio.onended = null
+      audio.pause()
+      attachAudioListeners(audio)
+      audio.src = audioSrc
+      audio.currentTime = 0
     }
 
     if (isPlayingPreview) {
@@ -255,20 +285,14 @@ export default function AdminPropertyForm() {
       return
     }
 
-    if (previewAudioRef.current) {
-      previewAudioRef.current.pause()
-      setIsPlayingPreview(false)
-    }
+    stopAndResetPreviewAudio()
 
     setMusicFile(file)
     setRemoveMusic(false)
   }
 
   const handleRemoveMusic = () => {
-    if (previewAudioRef.current) {
-      previewAudioRef.current.pause()
-      setIsPlayingPreview(false)
-    }
+    stopAndResetPreviewAudio()
     setMusicFile(null)
     setRemoveMusic(true)
   }
