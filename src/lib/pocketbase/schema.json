@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-28T15:43:05.691Z",
+  "generatedAt": "2026-09-28T16:24:41.596Z",
   "collections": [
     {
       "name": "users",
@@ -475,6 +475,20 @@
           "type": "number",
           "required": false,
           "system": false
+        },
+        {
+          "name": "point_size_desktop",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["pequeno", "medio", "grande"]
+        },
+        {
+          "name": "point_size_mobile",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["pequeno", "medio", "grande"]
         }
       ],
       "indexes": [

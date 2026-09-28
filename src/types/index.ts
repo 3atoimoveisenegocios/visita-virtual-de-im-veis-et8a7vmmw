@@ -43,6 +43,8 @@ export interface NavPoint {
   order?: number
   initial_yaw?: number
   initial_pitch?: number
+  point_size_desktop?: PointSize
+  point_size_mobile?: PointSize
   created: string
   updated: string
   collectionId?: string
@@ -52,6 +54,7 @@ export interface NavPoint {
 }
 
 export type ArrowSize = 'pequeno' | 'medio' | 'grande'
+export type PointSize = 'pequeno' | 'medio' | 'grande'
 export type ArrowOrientation = 'reta' | 'esquerda' | 'direita' | 'baixo' | 'personalizado'
 
 export interface Hotspot {
