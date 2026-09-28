@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-28T02:20:25.426Z",
+  "generatedAt": "2026-09-28T15:31:10.361Z",
   "collections": [
     {
       "name": "users",
@@ -318,7 +318,7 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["reta", "esquerda", "direita", "personalizado"]
+          "selectValues": ["reta", "esquerda", "direita", "baixo", "personalizado"]
         },
         {
           "name": "arrow_rotation",

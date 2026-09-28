@@ -604,7 +604,7 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         >
-                          <path d="M5 12h14M13 5l7 7-7 7" />
+                          <path d="M12 19V5M5 12l7-7 7 7" />
                         </svg>
                       </div>
                     </div>

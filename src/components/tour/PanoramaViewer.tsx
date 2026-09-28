@@ -21,27 +21,27 @@ export function getArrowSizeStyles(size: ArrowSize = 'pequeno') {
   switch (size) {
     case 'grande':
       return {
-        discWidth: 'w-14',
-        discHeight: 'h-10',
-        discHaloWidth: 'w-14',
-        discHaloHeight: 'h-7',
-        arrowBtnSize: 'w-8 h-8',
-        iconSize: 'w-4 h-4',
-        tooltipText: 'text-xs px-2.5 py-1',
+        discWidth: 'w-16',
+        discHeight: 'h-12',
+        discHaloWidth: 'w-16',
+        discHaloHeight: 'h-8',
+        arrowBtnSize: 'w-10 h-10',
+        iconSize: 'w-5 h-5',
+        tooltipText: 'text-xs px-3 py-1',
         // Door hotspot styles
-        doorPulseSize: 'w-16 h-16',
-        doorBtnSize: 'w-12 h-12',
-        doorIconSize: 'w-6 h-6',
+        doorPulseSize: 'w-20 h-20',
+        doorBtnSize: 'w-14 h-14',
+        doorIconSize: 'w-7 h-7',
       }
     case 'medio':
       return {
-        discWidth: 'w-11',
-        discHeight: 'h-8',
-        discHaloWidth: 'w-11',
-        discHaloHeight: 'h-5',
-        arrowBtnSize: 'w-6 h-6',
-        iconSize: 'w-3.5 h-3.5',
-        tooltipText: 'text-[11px] px-2 py-0.5',
+        discWidth: 'w-12',
+        discHeight: 'h-9',
+        discHaloWidth: 'w-12',
+        discHaloHeight: 'h-6',
+        arrowBtnSize: 'w-7 h-7',
+        iconSize: 'w-4 h-4',
+        tooltipText: 'text-[11px] px-2.5 py-0.5',
         // Door hotspot styles
         doorPulseSize: 'w-14 h-14',
         doorBtnSize: 'w-10 h-10',
@@ -50,25 +50,26 @@ export function getArrowSizeStyles(size: ArrowSize = 'pequeno') {
     case 'pequeno':
     default:
       return {
-        discWidth: 'w-9',
-        discHeight: 'h-7',
-        discHaloWidth: 'w-9',
-        discHaloHeight: 'h-4',
+        discWidth: 'w-8',
+        discHeight: 'h-6',
+        discHaloWidth: 'w-8',
+        discHaloHeight: 'h-3.5',
         arrowBtnSize: 'w-5 h-5',
-        iconSize: 'w-3 h-3',
+        iconSize: 'w-2.5 h-2.5',
         tooltipText: 'text-[10px] px-2 py-0.5',
         // Door hotspot styles
-        doorPulseSize: 'w-11 h-11',
-        doorBtnSize: 'w-8 h-8',
-        doorIconSize: 'w-4 h-4',
+        doorPulseSize: 'w-10 h-10',
+        doorBtnSize: 'w-7 h-7',
+        doorIconSize: 'w-3.5 h-3.5',
       }
   }
 }
 
 // Compute the effective arrow rotation angle in degrees
-// 'reta' -> 0° (points straight forward)
+// 'reta' -> 0° (points straight forward / up)
 // 'esquerda' -> -90° (points to the left)
 // 'direita' -> 90° (points to the right)
+// 'baixo' -> 180° (points down / backwards)
 // 'personalizado' -> user-specified rotation in degrees (arrow_rotation)
 export function getArrowRotationDegrees(
   orientation?: ArrowOrientation,
@@ -76,6 +77,7 @@ export function getArrowRotationDegrees(
 ): number {
   if (orientation === 'esquerda') return -90
   if (orientation === 'direita') return 90
+  if (orientation === 'baixo') return 180
   if (orientation === 'personalizado') return customRotation ?? 0
   if (orientation === 'reta') return 0
   // Default: if customRotation was set without orientation
@@ -850,7 +852,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                               >
-                                <path d="M5 12h14M13 5l7 7-7 7" />
+                                <path d="M12 19V5M5 12l7-7 7 7" />
                               </svg>
                             </div>
                           </div>

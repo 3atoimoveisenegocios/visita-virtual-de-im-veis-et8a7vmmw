@@ -110,8 +110,9 @@ export default function AdminTourBuilder() {
     'pequeno',
   )
   const [arrowSizeMobile, setArrowSizeMobile] = useState<'pequeno' | 'medio' | 'grande'>('pequeno')
+  const [previewDeviceMode, setPreviewDeviceMode] = useState<'desktop' | 'mobile'>('desktop')
   const [arrowOrientation, setArrowOrientation] = useState<
-    'reta' | 'esquerda' | 'direita' | 'personalizado'
+    'reta' | 'esquerda' | 'direita' | 'baixo' | 'personalizado'
   >('reta')
   const [arrowRotation, setArrowRotation] = useState<number>(0)
   const [isSavingHotspot, setIsSavingHotspot] = useState(false)
@@ -356,6 +357,7 @@ export default function AdminTourBuilder() {
     setHotspotDirection(0)
     setArrowSizeDesktop('pequeno')
     setArrowSizeMobile('pequeno')
+    setPreviewDeviceMode('desktop')
     setArrowOrientation('reta')
     setArrowRotation(0)
     setHotspotModalOpen(true)
@@ -378,6 +380,7 @@ export default function AdminTourBuilder() {
     setHotspotLabel(hotspot.label || '')
     setArrowSizeDesktop(hotspot.arrow_size_desktop || 'pequeno')
     setArrowSizeMobile(hotspot.arrow_size_mobile || 'pequeno')
+    setPreviewDeviceMode('desktop')
     setArrowOrientation(hotspot.arrow_orientation || 'reta')
     setArrowRotation(hotspot.arrow_rotation ?? 0)
     setHotspotModalOpen(true)
@@ -919,10 +922,12 @@ export default function AdminTourBuilder() {
                                                           ? 'Esq'
                                                           : hs.arrow_orientation === 'direita'
                                                             ? 'Dir'
-                                                            : hs.arrow_orientation ===
-                                                                'personalizado'
-                                                              ? `${hs.arrow_rotation ?? 0}°`
-                                                              : 'Reta'}
+                                                            : hs.arrow_orientation === 'baixo'
+                                                              ? 'Baixo'
+                                                              : hs.arrow_orientation ===
+                                                                  'personalizado'
+                                                                ? `${hs.arrow_rotation ?? 0}°`
+                                                                : 'Reta'}
                                                       </span>
                                                       <span>•</span>
                                                       <span className="text-slate-400 text-[9px]">
@@ -1622,20 +1627,58 @@ export default function AdminTourBuilder() {
                   </div>
 
                   {/* Interactive Panorama Picker with live arrow size, orientation and exact pitch preview */}
-                  <PanoramaDirectionPicker
-                    imageUrl={activePanoramaUrl}
-                    roomName={selectedSourceRoom?.name || 'Ambiente'}
-                    pointName={currentSrcPoint?.name}
-                    direction={hotspotDirection}
-                    pitch={hotspotPitch}
-                    onChangeDirection={(deg) => setHotspotDirection(deg)}
-                    onChangePitch={(pitchVal) => setHotspotPitch(pitchVal)}
-                    connectionType={hotspotType}
-                    targetName={targetDisplayName}
-                    arrowSize={arrowSizeDesktop}
-                    arrowOrientation={arrowOrientation}
-                    arrowRotation={arrowRotation}
-                  />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[11px] text-[#5B6B76]">
+                        Visualização da seta:{' '}
+                        <strong className="text-[#1C2B36]">
+                          {previewDeviceMode === 'desktop'
+                            ? `Desktop (${arrowSizeDesktop})`
+                            : `Mobile (${arrowSizeMobile})`}
+                        </strong>
+                      </span>
+                      <div className="inline-flex rounded-lg border border-[#E2E6E9] p-0.5 bg-slate-50 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewDeviceMode('desktop')}
+                          className={`px-2.5 py-0.5 rounded-md font-medium transition-all ${
+                            previewDeviceMode === 'desktop'
+                              ? 'bg-[#1F4E5F] text-white shadow-xs'
+                              : 'text-[#5B6B76] hover:text-[#1C2B36]'
+                          }`}
+                        >
+                          💻 Desktop
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewDeviceMode('mobile')}
+                          className={`px-2.5 py-0.5 rounded-md font-medium transition-all ${
+                            previewDeviceMode === 'mobile'
+                              ? 'bg-[#E07A3F] text-white shadow-xs'
+                              : 'text-[#5B6B76] hover:text-[#1C2B36]'
+                          }`}
+                        >
+                          📱 Mobile
+                        </button>
+                      </div>
+                    </div>
+                    <PanoramaDirectionPicker
+                      imageUrl={activePanoramaUrl}
+                      roomName={selectedSourceRoom?.name || 'Ambiente'}
+                      pointName={currentSrcPoint?.name}
+                      direction={hotspotDirection}
+                      pitch={hotspotPitch}
+                      onChangeDirection={(deg) => setHotspotDirection(deg)}
+                      onChangePitch={(pitchVal) => setHotspotPitch(pitchVal)}
+                      connectionType={hotspotType}
+                      targetName={targetDisplayName}
+                      arrowSize={
+                        previewDeviceMode === 'desktop' ? arrowSizeDesktop : arrowSizeMobile
+                      }
+                      arrowOrientation={arrowOrientation}
+                      arrowRotation={arrowRotation}
+                    />
+                  </div>
 
                   {/* Synchronized Manual controls (Yaw Slider, Pitch Slider and Direct degree inputs) */}
                   <div className="bg-[#F7F5F2] p-3 rounded-xl border border-[#E2E6E9] space-y-3">
@@ -1753,10 +1796,13 @@ export default function AdminTourBuilder() {
                             <button
                               key={`desktop-${sz}`}
                               type="button"
-                              onClick={() => setArrowSizeDesktop(sz)}
+                              onClick={() => {
+                                setArrowSizeDesktop(sz)
+                                setPreviewDeviceMode('desktop')
+                              }}
                               className={`py-1.5 px-2 text-xs font-medium rounded-lg border text-center transition-all ${
                                 arrowSizeDesktop === sz
-                                  ? 'bg-[#1F4E5F] text-white border-[#1F4E5F] shadow-xs'
+                                  ? 'bg-[#1F4E5F] text-white border-[#1F4E5F] shadow-xs font-bold'
                                   : 'bg-white text-[#5B6B76] border-[#E2E6E9] hover:bg-slate-50'
                               }`}
                             >
@@ -1783,10 +1829,13 @@ export default function AdminTourBuilder() {
                             <button
                               key={`mobile-${sz}`}
                               type="button"
-                              onClick={() => setArrowSizeMobile(sz)}
+                              onClick={() => {
+                                setArrowSizeMobile(sz)
+                                setPreviewDeviceMode('mobile')
+                              }}
                               className={`py-1.5 px-2 text-xs font-medium rounded-lg border text-center transition-all ${
                                 arrowSizeMobile === sz
-                                  ? 'bg-[#E07A3F] text-white border-[#E07A3F] shadow-xs'
+                                  ? 'bg-[#E07A3F] text-white border-[#E07A3F] shadow-xs font-bold'
                                   : 'bg-white text-[#5B6B76] border-[#E2E6E9] hover:bg-slate-50'
                               }`}
                             >
@@ -1804,15 +1853,16 @@ export default function AdminTourBuilder() {
                           Orientação da Seta (Para onde a seta aponta)
                         </Label>
                         <span className="text-[10px] text-[#5B6B76]">
-                          {arrowOrientation === 'reta' && 'Em frente (0°)'}
+                          {arrowOrientation === 'reta' && 'Em frente / Cima (0°)'}
                           {arrowOrientation === 'esquerda' && 'Virada para a esquerda (-90°)'}
                           {arrowOrientation === 'direita' && 'Virada para a direita (+90°)'}
+                          {arrowOrientation === 'baixo' && 'Virada para baixo (+180°)'}
                           {arrowOrientation === 'personalizado' &&
                             `Personalizada (${arrowRotation}°)`}
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
                         <button
                           type="button"
                           onClick={() => {
@@ -1863,8 +1913,24 @@ export default function AdminTourBuilder() {
 
                         <button
                           type="button"
-                          onClick={() => setArrowOrientation('personalizado')}
+                          onClick={() => {
+                            setArrowOrientation('baixo')
+                            setArrowRotation(180)
+                          }}
                           className={`p-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                            arrowOrientation === 'baixo'
+                              ? 'bg-[#1F4E5F] text-white border-[#1F4E5F] shadow-xs'
+                              : 'bg-slate-50 text-[#5B6B76] border-[#E2E6E9] hover:bg-slate-100'
+                          }`}
+                        >
+                          <span>⬇️</span>
+                          <span>Baixo</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setArrowOrientation('personalizado')}
+                          className={`p-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all col-span-2 sm:col-span-1 ${
                             arrowOrientation === 'personalizado'
                               ? 'bg-[#E07A3F] text-white border-[#E07A3F] shadow-xs'
                               : 'bg-slate-50 text-[#5B6B76] border-[#E2E6E9] hover:bg-slate-100'

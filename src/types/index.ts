@@ -52,7 +52,7 @@ export interface NavPoint {
 }
 
 export type ArrowSize = 'pequeno' | 'medio' | 'grande'
-export type ArrowOrientation = 'reta' | 'esquerda' | 'direita' | 'personalizado'
+export type ArrowOrientation = 'reta' | 'esquerda' | 'direita' | 'baixo' | 'personalizado'
 
 export interface Hotspot {
   id: string
