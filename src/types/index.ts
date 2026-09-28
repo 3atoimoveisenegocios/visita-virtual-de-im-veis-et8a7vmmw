@@ -13,6 +13,7 @@ export interface Property {
   published: boolean
   cover_image?: string
   floor_plan_image?: string
+  background_music?: string
   created: string
   updated: string
   collectionId?: string

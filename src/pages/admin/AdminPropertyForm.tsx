@@ -17,6 +17,10 @@ import {
   Image as ImageIcon,
   Trash2,
   Upload,
+  Music,
+  Play,
+  Pause,
+  Volume2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -47,6 +51,14 @@ export default function AdminPropertyForm() {
   const [floorPlanFile, setFloorPlanFile] = useState<File | null>(null)
   const [existingFloorPlan, setExistingFloorPlan] = useState('')
   const [removeFloorPlan, setRemoveFloorPlan] = useState(false)
+
+  // Background Music Fields
+  const [musicFile, setMusicFile] = useState<File | null>(null)
+  const [existingMusicUrl, setExistingMusicUrl] = useState('')
+  const [existingMusicName, setExistingMusicName] = useState('')
+  const [removeMusic, setRemoveMusic] = useState(false)
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false)
+  const previewAudioRef = React.useRef<HTMLAudioElement | null>(null)
 
   // Field errors
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -82,6 +94,10 @@ export default function AdminPropertyForm() {
       }
       if (prop.floor_plan_image) {
         setExistingFloorPlan(propertiesService.getFileUrl(prop, prop.floor_plan_image))
+      }
+      if (prop.background_music) {
+        setExistingMusicUrl(propertiesService.getFileUrl(prop, prop.background_music))
+        setExistingMusicName(prop.background_music)
       }
     } catch (err: any) {
       toast.error('Erro ao carregar dados do imóvel: ' + (err?.message || ''))
@@ -135,6 +151,12 @@ export default function AdminPropertyForm() {
         formData.append('floor_plan_image', '')
       }
 
+      if (musicFile) {
+        formData.append('background_music', musicFile)
+      } else if (removeMusic) {
+        formData.append('background_music', '')
+      }
+
       if (isEditing && id) {
         await propertiesService.updateProperty(id, formData)
         toast.success('Imóvel salvo com sucesso')
@@ -161,6 +183,94 @@ export default function AdminPropertyForm() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Cleanup preview audio when unmounting or changing source
+  useEffect(() => {
+    return () => {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause()
+        previewAudioRef.current.src = ''
+        previewAudioRef.current = null
+      }
+    }
+  }, [])
+
+  const togglePlayAudioPreview = (audioSrc: string) => {
+    if (!previewAudioRef.current) {
+      previewAudioRef.current = new Audio(audioSrc)
+      previewAudioRef.current.onended = () => {
+        setIsPlayingPreview(false)
+      }
+      previewAudioRef.current.onerror = () => {
+        setIsPlayingPreview(false)
+        toast.error('Erro ao reproduzir o arquivo de áudio.')
+      }
+    } else if (previewAudioRef.current.src !== audioSrc) {
+      previewAudioRef.current.pause()
+      previewAudioRef.current.src = audioSrc
+      previewAudioRef.current.currentTime = 0
+    }
+
+    if (isPlayingPreview) {
+      previewAudioRef.current.pause()
+      setIsPlayingPreview(false)
+    } else {
+      previewAudioRef.current
+        .play()
+        .then(() => {
+          setIsPlayingPreview(true)
+        })
+        .catch((err) => {
+          console.error('Falha ao reproduzir áudio:', err)
+          setIsPlayingPreview(false)
+          toast.error('Não foi possível reproduzir a prévia.')
+        })
+    }
+  }
+
+  const handleMusicFileSelection = (file: File) => {
+    const validMimes = [
+      'audio/mpeg',
+      'audio/mp3',
+      'audio/mp4',
+      'audio/x-m4a',
+      'audio/m4a',
+      'audio/aac',
+      'audio/ogg',
+      'audio/wav',
+      'audio/webm',
+    ]
+    const ext = file.name.split('.').pop()?.toLowerCase() || ''
+    const validExts = ['mp3', 'm4a', 'aac', 'ogg', 'wav', 'webm']
+
+    if (!validMimes.includes(file.type) && !validExts.includes(ext)) {
+      toast.error('Formato de áudio não suportado. Use MP3, M4A, AAC, OGG ou WAV.')
+      return
+    }
+
+    const maxBytes = 10 * 1024 * 1024 // 10MB
+    if (file.size > maxBytes) {
+      toast.error('O arquivo de música é muito grande. O limite máximo é de 10MB.')
+      return
+    }
+
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause()
+      setIsPlayingPreview(false)
+    }
+
+    setMusicFile(file)
+    setRemoveMusic(false)
+  }
+
+  const handleRemoveMusic = () => {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause()
+      setIsPlayingPreview(false)
+    }
+    setMusicFile(null)
+    setRemoveMusic(true)
   }
 
   if (initialLoading) {
@@ -544,6 +654,119 @@ export default function AdminPropertyForm() {
                       if (e.target.files && e.target.files[0]) {
                         setFloorPlanFile(e.target.files[0])
                         setRemoveFloorPlan(false)
+                      }
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+
+            {/* Background Music Upload */}
+            <div className="space-y-3 pt-2 border-t border-[#E2E6E9]">
+              <div>
+                <Label className="text-xs font-semibold text-[#1C2B36] flex items-center gap-1.5">
+                  <Music className="w-4 h-4 text-[#1F4E5F]" />
+                  <span>Música de Fundo do Imóvel (opcional)</span>
+                </Label>
+                <p className="text-[11px] text-[#5B6B76] mt-0.5">
+                  Áudio suave para tocar durante a visita virtual. Quando cadastrado, um botão de
+                  som aparecerá no tour para o visitante ativar ou desativar. A música toca de forma
+                  contínua sem reiniciar ao trocar de cômodo.
+                </p>
+              </div>
+
+              {musicFile || (!removeMusic && existingMusicUrl) ? (
+                <div className="border border-[#E2E6E9] rounded-xl p-4 bg-slate-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl border border-[#E2E6E9] bg-white flex items-center justify-center text-[#1F4E5F] shrink-0 shadow-sm">
+                      <Volume2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-[#1C2B36] truncate max-w-[240px] sm:max-w-xs">
+                        {musicFile ? musicFile.name : existingMusicName || 'Música cadastrada'}
+                      </div>
+                      <div className="text-[11px] text-[#5B6B76]">
+                        {musicFile
+                          ? `Novo arquivo (${(musicFile.size / (1024 * 1024)).toFixed(1)} MB)`
+                          : 'Áudio gravado no imóvel'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center flex-wrap gap-2 self-end sm:self-auto">
+                    {/* Botão de Ouvir / Testar */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const url = musicFile ? URL.createObjectURL(musicFile) : existingMusicUrl
+                        if (url) {
+                          togglePlayAudioPreview(url)
+                        }
+                      }}
+                      className="text-xs border-[#E2E6E9] bg-white hover:bg-slate-100 text-[#1C2B36] h-8"
+                    >
+                      {isPlayingPreview ? (
+                        <>
+                          <Pause className="w-3.5 h-3.5 mr-1.5 text-[#1F4E5F]" />
+                          Pausar
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-3.5 h-3.5 mr-1.5 text-[#1F4E5F] fill-current" />
+                          Ouvir Prévia
+                        </>
+                      )}
+                    </Button>
+
+                    {/* Substituir */}
+                    <label className="cursor-pointer inline-flex items-center justify-center h-8 px-3 rounded-md border border-[#E2E6E9] bg-white text-xs font-medium text-[#1C2B36] hover:bg-slate-100 transition-colors">
+                      <Upload className="w-3.5 h-3.5 mr-1.5" />
+                      Substituir
+                      <input
+                        type="file"
+                        accept="audio/mp3,audio/mpeg,audio/m4a,audio/x-m4a,audio/aac,audio/ogg,audio/wav"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleMusicFileSelection(e.target.files[0])
+                          }
+                        }}
+                      />
+                    </label>
+
+                    {/* Remover */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRemoveMusic}
+                      className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                      Remover Música
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <label className="w-full flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:border-[#1F4E5F] rounded-2xl p-6 cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                  <div className="w-10 h-10 rounded-full bg-[#1F4E5F]/10 flex items-center justify-center text-[#1F4E5F] mb-2">
+                    <Music className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-semibold text-[#1C2B36] mb-1">
+                    Selecionar arquivo de música de fundo
+                  </span>
+                  <span className="text-[11px] text-[#5B6B76]">
+                    Formatos aceitos: MP3, M4A, AAC, OGG, WAV (máx. 10MB)
+                  </span>
+                  <input
+                    type="file"
+                    accept="audio/mp3,audio/mpeg,audio/m4a,audio/x-m4a,audio/aac,audio/ogg,audio/wav"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleMusicFileSelection(e.target.files[0])
                       }
                     }}
                   />

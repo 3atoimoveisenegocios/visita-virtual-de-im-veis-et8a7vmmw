@@ -24,6 +24,8 @@ import {
   Building2,
   MapPin,
   Sparkles,
+  Volume2,
+  VolumeX,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -46,6 +48,10 @@ export default function VirtualTour() {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isFullscreenSupported, setIsFullscreenSupported] = useState(true)
   const frameContainerRef = useRef<HTMLDivElement>(null)
+
+  // Background Music state (single persistent HTMLAudioElement instance)
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false)
+  const audioInstanceRef = useRef<HTMLAudioElement | null>(null)
 
   // Transition state: fade-to-black 300ms
   const [isTransitioning, setIsTransitioning] = useState(false)
@@ -290,6 +296,75 @@ export default function VirtualTour() {
     }
     initTour()
   }, [id])
+
+  // Manage persistent background music instance across room transitions
+  useEffect(() => {
+    if (!property?.background_music) {
+      if (audioInstanceRef.current) {
+        audioInstanceRef.current.pause()
+        audioInstanceRef.current.src = ''
+        audioInstanceRef.current = null
+        setIsAudioPlaying(false)
+      }
+      return
+    }
+
+    const musicUrl = propertiesService.getFileUrl(property, property.background_music)
+    if (!musicUrl) return
+
+    if (!audioInstanceRef.current) {
+      const audio = new Audio(musicUrl)
+      audio.loop = true
+      audio.preload = 'auto'
+      audio.volume = 0.5 // volume agradável e suave
+      audio.onplay = () => setIsAudioPlaying(true)
+      audio.onpause = () => setIsAudioPlaying(false)
+      audio.onerror = (e) => {
+        console.warn('Erro ao carregar ou reproduzir áudio de fundo:', e)
+        setIsAudioPlaying(false)
+      }
+      audioInstanceRef.current = audio
+    } else if (audioInstanceRef.current.src !== musicUrl) {
+      const wasPlaying = !audioInstanceRef.current.paused
+      audioInstanceRef.current.src = musicUrl
+      audioInstanceRef.current.currentTime = 0
+      if (wasPlaying) {
+        audioInstanceRef.current.play().catch(() => setIsAudioPlaying(false))
+      }
+    }
+
+    // Cleanup when unmounting the VirtualTour page entirely
+    return () => {
+      if (audioInstanceRef.current) {
+        audioInstanceRef.current.pause()
+        audioInstanceRef.current.src = ''
+        audioInstanceRef.current = null
+      }
+    }
+  }, [property?.background_music, property])
+
+  // Toggle play/pause for background music
+  const toggleBackgroundMusic = useCallback(() => {
+    if (!audioInstanceRef.current) return
+
+    if (audioInstanceRef.current.paused) {
+      audioInstanceRef.current
+        .play()
+        .then(() => {
+          setIsAudioPlaying(true)
+          toast.success('Música ativada', { duration: 1500 })
+        })
+        .catch((err) => {
+          console.error('Autoplay/play bloqueado pelo navegador:', err)
+          setIsAudioPlaying(false)
+          toast.error('Não foi possível iniciar o áudio.')
+        })
+    } else {
+      audioInstanceRef.current.pause()
+      setIsAudioPlaying(false)
+      toast.info('Música pausada', { duration: 1500 })
+    }
+  }, [])
 
   // Move directly to a specific nav point (Street View step)
   const navigateToPoint = useCallback(
@@ -665,6 +740,34 @@ export default function VirtualTour() {
               >
                 <Map className="w-3.5 h-3.5 text-[#E07A3F]" />
                 <span className="hidden sm:inline">Planta</span>
+              </Button>
+            )}
+
+            {/* Botão Som/Música de Fundo (visível apenas se o imóvel possui música cadastrada) */}
+            {property.background_music && (
+              <Button
+                size="sm"
+                onClick={toggleBackgroundMusic}
+                className={cn(
+                  'backdrop-blur-md border rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 h-8 sm:h-auto text-xs font-semibold transition-all',
+                  isAudioPlaying
+                    ? 'bg-[#E07A3F]/85 hover:bg-[#E07A3F] text-white border-[#E07A3F]'
+                    : 'bg-black/65 hover:bg-black/85 text-white/80 hover:text-white border-white/15',
+                )}
+                title={isAudioPlaying ? 'Desativar música de fundo' : 'Ativar música de fundo'}
+                aria-label={isAudioPlaying ? 'Desativar música de fundo' : 'Ativar música de fundo'}
+              >
+                {isAudioPlaying ? (
+                  <>
+                    <Volume2 className="w-3.5 h-3.5 text-white animate-pulse" />
+                    <span className="hidden sm:inline">Música ligada</span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="w-3.5 h-3.5 text-white/70" />
+                    <span className="hidden sm:inline">Música</span>
+                  </>
+                )}
               </Button>
             )}
           </div>
