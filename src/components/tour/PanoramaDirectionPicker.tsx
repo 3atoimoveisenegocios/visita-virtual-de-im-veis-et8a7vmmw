@@ -578,28 +578,44 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
                 )
               })()
             ) : (
-              /* Door / Exit circular hotspot */
-              <div className="relative flex flex-col items-center">
-                <div className="relative flex items-center justify-center">
-                  <div className="absolute w-14 h-14 rounded-full bg-[#1F4E5F]/40 animate-ping" />
-                  <div className="w-11 h-11 rounded-full bg-[#1F4E5F] border-2 border-white text-white flex items-center justify-center shadow-2xl">
-                    <svg
-                      className="w-5 h-5 text-white"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+              /* Door / Exit circular hotspot with live arrow size and rotation */
+              (() => {
+                const sizeStyles = getArrowSizeStyles(arrowSize)
+                const arrowRotationDeg = getArrowRotationDegrees(arrowOrientation, arrowRotation)
+
+                return (
+                  <div className="relative flex flex-col items-center">
+                    <div className="relative flex items-center justify-center">
+                      <div
+                        className={`absolute ${sizeStyles.doorPulseSize} rounded-full bg-[#1F4E5F]/40 animate-ping`}
+                      />
+                      <div
+                        className={`${sizeStyles.doorBtnSize} rounded-full bg-[#1F4E5F] border-2 border-white text-white flex items-center justify-center shadow-2xl`}
+                      >
+                        <svg
+                          className={`${sizeStyles.doorIconSize} text-white transition-transform`}
+                          style={{
+                            transform: `rotate(${arrowRotationDeg}deg)`,
+                          }}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M5 12h14M13 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div
+                      className={`mt-1 bg-black/85 backdrop-blur-md text-white ${sizeStyles.tooltipText} font-semibold rounded-full border border-white/25 shadow-lg whitespace-nowrap`}
                     >
-                      <path d="M5 12h14M13 5l7 7-7 7" />
-                    </svg>
+                      {targetName || 'Saída / Porta aqui'}
+                    </div>
                   </div>
-                </div>
-                <div className="mt-1 bg-black/85 backdrop-blur-md text-white text-[11px] font-semibold px-2.5 py-1 rounded-full border border-white/25 shadow-lg whitespace-nowrap">
-                  {targetName || 'Saída / Porta aqui'}
-                </div>
-              </div>
+                )
+              })()
             )}
           </div>
         </div>

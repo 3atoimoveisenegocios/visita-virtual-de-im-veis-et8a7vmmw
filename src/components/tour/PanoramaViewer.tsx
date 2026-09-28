@@ -28,6 +28,10 @@ export function getArrowSizeStyles(size: ArrowSize = 'pequeno') {
         arrowBtnSize: 'w-8 h-8',
         iconSize: 'w-4 h-4',
         tooltipText: 'text-xs px-2.5 py-1',
+        // Door hotspot styles
+        doorPulseSize: 'w-16 h-16',
+        doorBtnSize: 'w-12 h-12',
+        doorIconSize: 'w-6 h-6',
       }
     case 'medio':
       return {
@@ -38,6 +42,10 @@ export function getArrowSizeStyles(size: ArrowSize = 'pequeno') {
         arrowBtnSize: 'w-6 h-6',
         iconSize: 'w-3.5 h-3.5',
         tooltipText: 'text-[11px] px-2 py-0.5',
+        // Door hotspot styles
+        doorPulseSize: 'w-14 h-14',
+        doorBtnSize: 'w-10 h-10',
+        doorIconSize: 'w-5 h-5',
       }
     case 'pequeno':
     default:
@@ -49,6 +57,10 @@ export function getArrowSizeStyles(size: ArrowSize = 'pequeno') {
         arrowBtnSize: 'w-5 h-5',
         iconSize: 'w-3 h-3',
         tooltipText: 'text-[10px] px-2 py-0.5',
+        // Door hotspot styles
+        doorPulseSize: 'w-11 h-11',
+        doorBtnSize: 'w-8 h-8',
+        doorIconSize: 'w-4 h-4',
       }
   }
 }
@@ -342,12 +354,16 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
         const activeHotspots = (mesh.userData.hotspots as Hotspot[]) || []
 
         const projectedList: VisibleHotspotItem[] = activeHotspots.map((hs) => {
-          // Standard real estate hotspots are located at floor/mid height level
-          // Direction is horizontal yaw (0..360). For step markers, pitch is slightly down (~ -16°);
-          // for door/room exits, pitch is around horizontal horizon (~ -4°).
+          // Use saved pitch from connection if set (aimed by user in admin builder).
+          // Fallback only if pitch is undefined/null (legacy hotspots):
+          // step markers defaulted to -16° and door/room exits to -4°.
           const isStep =
             hs.type === 'step' || (hs.room === hs.target_room && Boolean(hs.target_nav_point))
-          const hsPitch = isStep ? -16 : -4
+          const fallbackPitch = isStep ? -16 : -4
+          const hsPitch =
+            hs.pitch !== undefined && hs.pitch !== null && !isNaN(Number(hs.pitch))
+              ? Number(hs.pitch)
+              : fallbackPitch
 
           const proj = projectSphericalToScreen(hs.direction, hsPitch, camera, curW, curH, 500)
 
@@ -748,73 +764,105 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
                   onHotspotClick(item.hotspot)
                 }}
               >
-                {isStep ? (
-                  /* Street View style displacement arrow / floor disc */
-                  (() => {
-                    const arrowSizeConfig = isMobile
-                      ? item.hotspot.arrow_size_mobile || 'pequeno'
-                      : item.hotspot.arrow_size_desktop || 'pequeno'
-                    const sizeStyles = getArrowSizeStyles(arrowSizeConfig)
-                    const arrowRotationDeg = getArrowRotationDegrees(
-                      item.hotspot.arrow_orientation,
-                      item.hotspot.arrow_rotation,
-                    )
+                {isStep
+                  ? /* Street View style displacement arrow / floor disc */
+                    (() => {
+                      const arrowSizeConfig = isMobile
+                        ? item.hotspot.arrow_size_mobile || 'pequeno'
+                        : item.hotspot.arrow_size_desktop || 'pequeno'
+                      const sizeStyles = getArrowSizeStyles(arrowSizeConfig)
+                      const arrowRotationDeg = getArrowRotationDegrees(
+                        item.hotspot.arrow_orientation,
+                        item.hotspot.arrow_rotation,
+                      )
 
-                    return (
-                      <div className="relative flex flex-col items-center justify-center">
-                        {/* Perspective floor disc */}
-                        <div
-                          className={`relative ${sizeStyles.discWidth} ${sizeStyles.discHeight} flex items-center justify-center`}
-                        >
+                      return (
+                        <div className="relative flex flex-col items-center justify-center">
+                          {/* Perspective floor disc */}
                           <div
-                            className={`absolute ${sizeStyles.discHaloWidth} ${sizeStyles.discHaloHeight} rounded-[100%] bg-white/25 border-2 border-white shadow-[0_0_12px_rgba(255,255,255,0.6)] animate-pulse pointer-events-none transition-transform group-hover:scale-110 group-hover:bg-[#E07A3F]/40 group-hover:border-[#E07A3F]`}
-                          />
-                          <div
-                            className={`relative z-10 ${sizeStyles.arrowBtnSize} rounded-full bg-[#E07A3F] text-white flex items-center justify-center shadow-lg border-2 border-white group-hover:scale-110 transition-transform`}
+                            className={`relative ${sizeStyles.discWidth} ${sizeStyles.discHeight} flex items-center justify-center`}
                           >
-                            <svg
-                              className={`${sizeStyles.iconSize} text-white transition-transform group-hover:-translate-y-0.5`}
-                              style={{
-                                transform: `rotate(${arrowRotationDeg}deg)`,
-                              }}
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="3.2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
+                            <div
+                              className={`absolute ${sizeStyles.discHaloWidth} ${sizeStyles.discHaloHeight} rounded-[100%] bg-white/25 border-2 border-white shadow-[0_0_12px_rgba(255,255,255,0.6)] animate-pulse pointer-events-none transition-transform group-hover:scale-110 group-hover:bg-[#E07A3F]/40 group-hover:border-[#E07A3F]`}
+                            />
+                            <div
+                              className={`relative z-10 ${sizeStyles.arrowBtnSize} rounded-full bg-[#E07A3F] text-white flex items-center justify-center shadow-lg border-2 border-white group-hover:scale-110 transition-transform`}
                             >
-                              <path d="M12 19V5M5 12l7-7 7 7" />
-                            </svg>
+                              <svg
+                                className={`${sizeStyles.iconSize} text-white transition-transform group-hover:-translate-y-0.5`}
+                                style={{
+                                  transform: `rotate(${arrowRotationDeg}deg)`,
+                                }}
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3.2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M12 19V5M5 12l7-7 7 7" />
+                              </svg>
+                            </div>
+                          </div>
+
+                          {/* Step Tooltip */}
+                          <div
+                            className={`mt-0.5 whitespace-nowrap bg-black/85 backdrop-blur-md text-white ${sizeStyles.tooltipText} font-semibold rounded-full shadow-lg border border-white/20 pointer-events-none transition-all group-hover:bg-[#E07A3F] group-hover:border-white`}
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                              {label}
+                            </span>
                           </div>
                         </div>
+                      )
+                    })()
+                  : /* Door / Room exit circular hotspot */
+                    (() => {
+                      const arrowSizeConfig = isMobile
+                        ? item.hotspot.arrow_size_mobile || 'pequeno'
+                        : item.hotspot.arrow_size_desktop || 'pequeno'
+                      const sizeStyles = getArrowSizeStyles(arrowSizeConfig)
+                      const arrowRotationDeg = getArrowRotationDegrees(
+                        item.hotspot.arrow_orientation,
+                        item.hotspot.arrow_rotation,
+                      )
 
-                        {/* Step Tooltip */}
-                        <div
-                          className={`mt-0.5 whitespace-nowrap bg-black/85 backdrop-blur-md text-white ${sizeStyles.tooltipText} font-semibold rounded-full shadow-lg border border-white/20 pointer-events-none transition-all group-hover:bg-[#E07A3F] group-hover:border-white`}
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                      return (
+                        <div className="relative flex flex-col items-center justify-center">
+                          <div className="relative flex items-center justify-center">
+                            <div
+                              className={`absolute ${sizeStyles.doorPulseSize} rounded-full bg-[#E07A3F]/30 animate-pulse-ring pointer-events-none`}
+                            />
+
+                            <div
+                              className={`${sizeStyles.doorBtnSize} rounded-full bg-[#1F4E5F] border-2 border-white text-white flex items-center justify-center shadow-lg transition-colors group-hover:bg-[#E07A3F]`}
+                            >
+                              <svg
+                                className={`${sizeStyles.doorIconSize} text-white transition-transform group-hover:scale-110`}
+                                style={{
+                                  transform: `rotate(${arrowRotationDeg}deg)`,
+                                }}
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M5 12h14M13 5l7 7-7 7" />
+                              </svg>
+                            </div>
+                          </div>
+
+                          <div
+                            className={`mt-1 whitespace-nowrap bg-black/85 backdrop-blur-md text-white ${sizeStyles.tooltipText} font-semibold rounded-full shadow-md border border-white/20 pointer-events-none transition-opacity duration-200 group-hover:bg-[#E07A3F] group-hover:border-white`}
+                          >
                             {label}
-                          </span>
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })()
-                ) : (
-                  /* Door / Room exit circular hotspot */
-                  <div className="relative flex items-center justify-center">
-                    <div className="absolute w-12 h-12 rounded-full bg-[#E07A3F]/30 animate-pulse-ring pointer-events-none" />
-
-                    <div className="w-10 h-10 rounded-full bg-[#1F4E5F] border-2 border-white text-white flex items-center justify-center shadow-lg transition-colors group-hover:bg-[#E07A3F]">
-                      <ChevronRight className="w-5 h-5 transition-transform group-hover:translate-x-0.5" />
-                    </div>
-
-                    <div className="absolute top-12 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/85 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-md border border-white/20 pointer-events-none transition-opacity duration-200">
-                      {label}
-                    </div>
-                  </div>
-                )}
+                      )
+                    })()}
               </div>
             )
           })}

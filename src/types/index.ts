@@ -61,6 +61,7 @@ export interface Hotspot {
   nav_point?: string
   target_nav_point?: string
   direction: number // 0 to 360
+  pitch?: number // -89.5 to 89.5 degrees
   type?: 'step' | 'door'
   label?: string
   arrow_size_desktop?: ArrowSize

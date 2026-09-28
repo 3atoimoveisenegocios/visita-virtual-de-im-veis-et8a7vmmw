@@ -31,6 +31,7 @@ export const hotspotsService = {
     nav_point?: string
     target_nav_point?: string
     direction: number
+    pitch?: number
     type?: 'step' | 'door'
     label?: string
     arrow_size_desktop?: 'pequeno' | 'medio' | 'grande'
