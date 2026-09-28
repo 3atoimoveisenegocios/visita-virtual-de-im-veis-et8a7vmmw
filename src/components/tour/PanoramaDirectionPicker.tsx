@@ -12,6 +12,8 @@ import {
 } from '@/lib/panorama-spherical'
 import { RotateCw, Compass, ZoomIn, ZoomOut, Info, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import type { ArrowSize, ArrowOrientation } from '@/types'
+import { getArrowSizeStyles, getArrowRotationDegrees } from '@/components/tour/PanoramaViewer'
 
 interface PanoramaDirectionPickerProps {
   imageUrl?: string
@@ -24,6 +26,9 @@ interface PanoramaDirectionPickerProps {
   connectionType?: 'step' | 'door'
   targetName?: string
   mode?: 'connection' | 'initial_view'
+  arrowSize?: ArrowSize
+  arrowOrientation?: ArrowOrientation
+  arrowRotation?: number
 }
 
 export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = ({
@@ -37,6 +42,9 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
   connectionType = 'step',
   targetName,
   mode = 'connection',
+  arrowSize = 'pequeno',
+  arrowOrientation = 'reta',
+  arrowRotation = 0,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
@@ -530,27 +538,45 @@ export const PanoramaDirectionPicker: React.FC<PanoramaDirectionPickerProps> = (
               </div>
             ) : isStep ? (
               /* Street View step disc */
-              <div className="relative flex flex-col items-center">
-                <div className="relative w-16 h-12 flex items-center justify-center">
-                  <div className="absolute w-16 h-8 rounded-[100%] bg-[#E07A3F]/35 border-2 border-white shadow-[0_0_15px_rgba(224,122,63,0.8)] animate-pulse" />
-                  <div className="relative z-10 w-10 h-10 rounded-full bg-[#E07A3F] text-white flex items-center justify-center shadow-2xl border-2 border-white">
-                    <svg
-                      className="w-5 h-5 text-white"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="3.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+              (() => {
+                const sizeStyles = getArrowSizeStyles(arrowSize)
+                const arrowRotationDeg = getArrowRotationDegrees(arrowOrientation, arrowRotation)
+
+                return (
+                  <div className="relative flex flex-col items-center">
+                    <div
+                      className={`relative ${sizeStyles.discWidth} ${sizeStyles.discHeight} flex items-center justify-center`}
                     >
-                      <path d="M12 19V5M5 12l7-7 7 7" />
-                    </svg>
+                      <div
+                        className={`absolute ${sizeStyles.discHaloWidth} ${sizeStyles.discHaloHeight} rounded-[100%] bg-[#E07A3F]/35 border-2 border-white shadow-[0_0_12px_rgba(224,122,63,0.8)] animate-pulse`}
+                      />
+                      <div
+                        className={`relative z-10 ${sizeStyles.arrowBtnSize} rounded-full bg-[#E07A3F] text-white flex items-center justify-center shadow-xl border-2 border-white`}
+                      >
+                        <svg
+                          className={`${sizeStyles.iconSize} text-white transition-transform`}
+                          style={{
+                            transform: `rotate(${arrowRotationDeg}deg)`,
+                          }}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M12 19V5M5 12l7-7 7 7" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div
+                      className={`mt-0.5 bg-black/85 backdrop-blur-md text-white ${sizeStyles.tooltipText} font-semibold rounded-full border border-white/25 shadow-lg whitespace-nowrap`}
+                    >
+                      {targetName || 'Próximo passo aqui'}
+                    </div>
                   </div>
-                </div>
-                <div className="mt-1 bg-black/85 backdrop-blur-md text-white text-[11px] font-semibold px-2.5 py-1 rounded-full border border-white/25 shadow-lg whitespace-nowrap">
-                  {targetName || 'Próximo passo aqui'}
-                </div>
-              </div>
+                )
+              })()
             ) : (
               /* Door / Exit circular hotspot */
               <div className="relative flex flex-col items-center">

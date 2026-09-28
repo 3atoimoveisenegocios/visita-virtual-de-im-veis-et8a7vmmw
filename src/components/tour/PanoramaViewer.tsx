@@ -11,8 +11,67 @@ import {
   projectSphericalToScreen,
   sphericalToVector3,
 } from '@/lib/panorama-spherical'
-import type { Hotspot } from '@/types'
+import type { Hotspot, ArrowSize, ArrowOrientation } from '@/types'
 import { ChevronRight, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
+import { useIsMobile } from '@/hooks/use-mobile'
+
+// Scale factor and CSS sizes according to ArrowSize ('pequeno' | 'medio' | 'grande')
+// Default is now 'pequeno' (smaller by default to not clutter the view)
+export function getArrowSizeStyles(size: ArrowSize = 'pequeno') {
+  switch (size) {
+    case 'grande':
+      return {
+        discWidth: 'w-14',
+        discHeight: 'h-10',
+        discHaloWidth: 'w-14',
+        discHaloHeight: 'h-7',
+        arrowBtnSize: 'w-8 h-8',
+        iconSize: 'w-4 h-4',
+        tooltipText: 'text-xs px-2.5 py-1',
+      }
+    case 'medio':
+      return {
+        discWidth: 'w-11',
+        discHeight: 'h-8',
+        discHaloWidth: 'w-11',
+        discHaloHeight: 'h-5',
+        arrowBtnSize: 'w-6 h-6',
+        iconSize: 'w-3.5 h-3.5',
+        tooltipText: 'text-[11px] px-2 py-0.5',
+      }
+    case 'pequeno':
+    default:
+      return {
+        discWidth: 'w-9',
+        discHeight: 'h-7',
+        discHaloWidth: 'w-9',
+        discHaloHeight: 'h-4',
+        arrowBtnSize: 'w-5 h-5',
+        iconSize: 'w-3 h-3',
+        tooltipText: 'text-[10px] px-2 py-0.5',
+      }
+  }
+}
+
+// Compute the effective arrow rotation angle in degrees
+// 'reta' -> 0° (points straight forward)
+// 'esquerda' -> -90° (points to the left)
+// 'direita' -> 90° (points to the right)
+// 'personalizado' -> user-specified rotation in degrees (arrow_rotation)
+export function getArrowRotationDegrees(
+  orientation?: ArrowOrientation,
+  customRotation?: number,
+): number {
+  if (orientation === 'esquerda') return -90
+  if (orientation === 'direita') return 90
+  if (orientation === 'personalizado') return customRotation ?? 0
+  if (orientation === 'reta') return 0
+  // Default: if customRotation was set without orientation
+  if (customRotation !== undefined && customRotation !== null && !isNaN(customRotation)) {
+    return customRotation
+  }
+  return 0
+}
 
 interface PanoramaViewerProps {
   imageUrl: string
@@ -49,6 +108,7 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
   const mountRef = useRef<HTMLDivElement>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [webglSupported, setWebglSupported] = useState(true)
+  const isMobile = useIsMobile()
 
   // Spherical camera orientation & FOV state
   // yaw: 0..360, pitch: -89.5..89.5 (degrees) - Full 180° vertical pan
@@ -690,33 +750,57 @@ export const PanoramaViewer: React.FC<PanoramaViewerProps> = ({
               >
                 {isStep ? (
                   /* Street View style displacement arrow / floor disc */
-                  <div className="relative flex flex-col items-center justify-center">
-                    {/* Perspective floor disc */}
-                    <div className="relative w-16 h-12 flex items-center justify-center">
-                      <div className="absolute w-16 h-8 rounded-[100%] bg-white/25 border-2 border-white shadow-[0_0_15px_rgba(255,255,255,0.6)] animate-pulse pointer-events-none transition-transform group-hover:scale-110 group-hover:bg-[#E07A3F]/40 group-hover:border-[#E07A3F]" />
-                      <div className="relative z-10 w-9 h-9 rounded-full bg-[#E07A3F] text-white flex items-center justify-center shadow-xl border-2 border-white group-hover:scale-110 transition-transform">
-                        <svg
-                          className="w-5 h-5 text-white transition-transform group-hover:-translate-y-0.5"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M12 19V5M5 12l7-7 7 7" />
-                        </svg>
-                      </div>
-                    </div>
+                  (() => {
+                    const arrowSizeConfig = isMobile
+                      ? item.hotspot.arrow_size_mobile || 'pequeno'
+                      : item.hotspot.arrow_size_desktop || 'pequeno'
+                    const sizeStyles = getArrowSizeStyles(arrowSizeConfig)
+                    const arrowRotationDeg = getArrowRotationDegrees(
+                      item.hotspot.arrow_orientation,
+                      item.hotspot.arrow_rotation,
+                    )
 
-                    {/* Step Tooltip */}
-                    <div className="mt-1 whitespace-nowrap bg-black/85 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg border border-white/20 pointer-events-none transition-all group-hover:bg-[#E07A3F] group-hover:border-white">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                        {label}
-                      </span>
-                    </div>
-                  </div>
+                    return (
+                      <div className="relative flex flex-col items-center justify-center">
+                        {/* Perspective floor disc */}
+                        <div
+                          className={`relative ${sizeStyles.discWidth} ${sizeStyles.discHeight} flex items-center justify-center`}
+                        >
+                          <div
+                            className={`absolute ${sizeStyles.discHaloWidth} ${sizeStyles.discHaloHeight} rounded-[100%] bg-white/25 border-2 border-white shadow-[0_0_12px_rgba(255,255,255,0.6)] animate-pulse pointer-events-none transition-transform group-hover:scale-110 group-hover:bg-[#E07A3F]/40 group-hover:border-[#E07A3F]`}
+                          />
+                          <div
+                            className={`relative z-10 ${sizeStyles.arrowBtnSize} rounded-full bg-[#E07A3F] text-white flex items-center justify-center shadow-lg border-2 border-white group-hover:scale-110 transition-transform`}
+                          >
+                            <svg
+                              className={`${sizeStyles.iconSize} text-white transition-transform group-hover:-translate-y-0.5`}
+                              style={{
+                                transform: `rotate(${arrowRotationDeg}deg)`,
+                              }}
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="3.2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M12 19V5M5 12l7-7 7 7" />
+                            </svg>
+                          </div>
+                        </div>
+
+                        {/* Step Tooltip */}
+                        <div
+                          className={`mt-0.5 whitespace-nowrap bg-black/85 backdrop-blur-md text-white ${sizeStyles.tooltipText} font-semibold rounded-full shadow-lg border border-white/20 pointer-events-none transition-all group-hover:bg-[#E07A3F] group-hover:border-white`}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                            {label}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })()
                 ) : (
                   /* Door / Room exit circular hotspot */
                   <div className="relative flex items-center justify-center">

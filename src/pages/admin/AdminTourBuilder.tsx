@@ -105,6 +105,14 @@ export default function AdminTourBuilder() {
   const [targetPointId, setTargetPointId] = useState('')
   const [hotspotDirection, setHotspotDirection] = useState<number>(0)
   const [hotspotLabel, setHotspotLabel] = useState('')
+  const [arrowSizeDesktop, setArrowSizeDesktop] = useState<'pequeno' | 'medio' | 'grande'>(
+    'pequeno',
+  )
+  const [arrowSizeMobile, setArrowSizeMobile] = useState<'pequeno' | 'medio' | 'grande'>('pequeno')
+  const [arrowOrientation, setArrowOrientation] = useState<
+    'reta' | 'esquerda' | 'direita' | 'personalizado'
+  >('reta')
+  const [arrowRotation, setArrowRotation] = useState<number>(0)
   const [isSavingHotspot, setIsSavingHotspot] = useState(false)
 
   // Floor plan point dragging state
@@ -343,6 +351,10 @@ export default function AdminTourBuilder() {
     }
 
     setHotspotDirection(0)
+    setArrowSizeDesktop('pequeno')
+    setArrowSizeMobile('pequeno')
+    setArrowOrientation('reta')
+    setArrowRotation(0)
     setHotspotModalOpen(true)
   }
 
@@ -358,6 +370,10 @@ export default function AdminTourBuilder() {
     setTargetPointId(hotspot.target_nav_point || '')
     setHotspotDirection(hotspot.direction ?? 0)
     setHotspotLabel(hotspot.label || '')
+    setArrowSizeDesktop(hotspot.arrow_size_desktop || 'pequeno')
+    setArrowSizeMobile(hotspot.arrow_size_mobile || 'pequeno')
+    setArrowOrientation(hotspot.arrow_orientation || 'reta')
+    setArrowRotation(hotspot.arrow_rotation ?? 0)
     setHotspotModalOpen(true)
   }
 
@@ -384,6 +400,11 @@ export default function AdminTourBuilder() {
           direction: finalDirection,
           type: hotspotType,
           label: hotspotLabel.trim() || undefined,
+          arrow_size_desktop: arrowSizeDesktop,
+          arrow_size_mobile: arrowSizeMobile,
+          arrow_orientation: arrowOrientation,
+          arrow_rotation:
+            arrowOrientation === 'personalizado' ? Math.round(Number(arrowRotation)) : 0,
         })
 
         const updatedWithExpand: Hotspot = {
@@ -411,6 +432,11 @@ export default function AdminTourBuilder() {
           direction: finalDirection,
           type: hotspotType,
           label: hotspotLabel.trim() || undefined,
+          arrow_size_desktop: arrowSizeDesktop,
+          arrow_size_mobile: arrowSizeMobile,
+          arrow_orientation: arrowOrientation,
+          arrow_rotation:
+            arrowOrientation === 'personalizado' ? Math.round(Number(arrowRotation)) : 0,
         })
 
         const createdWithExpand: Hotspot = {
@@ -876,10 +902,33 @@ export default function AdminTourBuilder() {
                                                           : targetRoomObj?.name || 'Outro Cômodo'}
                                                       </span>
                                                     </div>
-                                                    <span className="text-[10px] text-[#5B6B76] block truncate">
-                                                      {isStep
-                                                        ? '🚶 Passo no mesmo cômodo'
-                                                        : '🚪 Saída de ambiente'}
+                                                    <span className="text-[10px] text-[#5B6B76] flex items-center gap-1 truncate">
+                                                      <span>{isStep ? '🚶 Seta' : '🚪 Saída'}</span>
+                                                      {isStep && (
+                                                        <>
+                                                          <span>•</span>
+                                                          <span className="text-slate-500 font-medium">
+                                                            {hs.arrow_orientation === 'esquerda'
+                                                              ? 'Esq'
+                                                              : hs.arrow_orientation === 'direita'
+                                                                ? 'Dir'
+                                                                : hs.arrow_orientation ===
+                                                                    'personalizado'
+                                                                  ? `${hs.arrow_rotation ?? 0}°`
+                                                                  : 'Reta'}
+                                                          </span>
+                                                          <span>•</span>
+                                                          <span className="text-slate-400 text-[9px]">
+                                                            D:{hs.arrow_size_desktop?.[0] || 'p'} M:
+                                                            {hs.arrow_size_mobile?.[0] || 'p'}
+                                                          </span>
+                                                        </>
+                                                      )}
+                                                      {!isStep && (
+                                                        <span className="text-[#5B6B76] truncate">
+                                                          de ambiente
+                                                        </span>
+                                                      )}
                                                     </span>
                                                   </div>
                                                 </div>
@@ -1551,7 +1600,7 @@ export default function AdminTourBuilder() {
                     </span>
                   </div>
 
-                  {/* Interactive Panorama Picker */}
+                  {/* Interactive Panorama Picker with live arrow size and orientation preview */}
                   <PanoramaDirectionPicker
                     imageUrl={activePanoramaUrl}
                     roomName={selectedSourceRoom?.name || 'Ambiente'}
@@ -1560,6 +1609,9 @@ export default function AdminTourBuilder() {
                     onChangeDirection={(deg) => setHotspotDirection(deg)}
                     connectionType={hotspotType}
                     targetName={targetDisplayName}
+                    arrowSize={arrowSizeDesktop}
+                    arrowOrientation={arrowOrientation}
+                    arrowRotation={arrowRotation}
                   />
 
                   {/* Synchronized Manual controls (Slider, Direct degree input and Compass disk) */}
@@ -1604,6 +1656,213 @@ export default function AdminTourBuilder() {
                       </div>
                     </div>
                   </div>
+
+                  {/* CONTROLES EXCLUSIVOS DE TAMANHO E ORIENTAÇÃO DA SETA DE DESLOCAMENTO */}
+                  {hotspotType === 'step' && (
+                    <div className="bg-white p-3.5 rounded-xl border border-[#E2E6E9] space-y-4 mt-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm">🎯</span>
+                          <span className="text-xs font-bold text-[#1C2B36]">
+                            Personalização da Seta de Deslocamento
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-[#5B6B76]">
+                          Padrão: menor para não atrapalhar
+                        </span>
+                      </div>
+
+                      {/* Tamanhos separados: Desktop e Celular */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Tamanho Desktop */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold text-[#1C2B36] flex items-center justify-between">
+                            <span>Tamanho no Desktop / Computador</span>
+                            <span className="text-[10px] font-normal text-[#5B6B76]">
+                              {arrowSizeDesktop === 'pequeno'
+                                ? 'Pequeno (discreto)'
+                                : arrowSizeDesktop === 'medio'
+                                  ? 'Médio'
+                                  : 'Grande'}
+                            </span>
+                          </Label>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {(['pequeno', 'medio', 'grande'] as const).map((sz) => (
+                              <button
+                                key={`desktop-${sz}`}
+                                type="button"
+                                onClick={() => setArrowSizeDesktop(sz)}
+                                className={`py-1.5 px-2 text-xs font-medium rounded-lg border text-center transition-all ${
+                                  arrowSizeDesktop === sz
+                                    ? 'bg-[#1F4E5F] text-white border-[#1F4E5F] shadow-xs'
+                                    : 'bg-white text-[#5B6B76] border-[#E2E6E9] hover:bg-slate-50'
+                                }`}
+                              >
+                                {sz === 'pequeno' ? 'Pequena' : sz === 'medio' ? 'Média' : 'Grande'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Tamanho Celular */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold text-[#1C2B36] flex items-center justify-between">
+                            <span>Tamanho no Celular / Mobile</span>
+                            <span className="text-[10px] font-normal text-[#5B6B76]">
+                              {arrowSizeMobile === 'pequeno'
+                                ? 'Pequeno (discreto)'
+                                : arrowSizeMobile === 'medio'
+                                  ? 'Médio'
+                                  : 'Grande'}
+                            </span>
+                          </Label>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {(['pequeno', 'medio', 'grande'] as const).map((sz) => (
+                              <button
+                                key={`mobile-${sz}`}
+                                type="button"
+                                onClick={() => setArrowSizeMobile(sz)}
+                                className={`py-1.5 px-2 text-xs font-medium rounded-lg border text-center transition-all ${
+                                  arrowSizeMobile === sz
+                                    ? 'bg-[#E07A3F] text-white border-[#E07A3F] shadow-xs'
+                                    : 'bg-white text-[#5B6B76] border-[#E2E6E9] hover:bg-slate-50'
+                                }`}
+                              >
+                                {sz === 'pequeno' ? 'Pequena' : sz === 'medio' ? 'Média' : 'Grande'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Orientação da Seta (Reta, Esquerda, Direita, Personalizado) */}
+                      <div className="space-y-2 pt-2 border-t border-slate-100">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-semibold text-[#1C2B36]">
+                            Orientação da Seta (Para onde a seta aponta)
+                          </Label>
+                          <span className="text-[10px] text-[#5B6B76]">
+                            {arrowOrientation === 'reta' && 'Em frente (0°)'}
+                            {arrowOrientation === 'esquerda' && 'Virada para a esquerda (-90°)'}
+                            {arrowOrientation === 'direita' && 'Virada para a direita (+90°)'}
+                            {arrowOrientation === 'personalizado' &&
+                              `Personalizada (${arrowRotation}°)`}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setArrowOrientation('reta')
+                              setArrowRotation(0)
+                            }}
+                            className={`p-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                              arrowOrientation === 'reta'
+                                ? 'bg-[#1F4E5F] text-white border-[#1F4E5F] shadow-xs'
+                                : 'bg-slate-50 text-[#5B6B76] border-[#E2E6E9] hover:bg-slate-100'
+                            }`}
+                          >
+                            <span>⬆️</span>
+                            <span>Reta</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setArrowOrientation('esquerda')
+                              setArrowRotation(-90)
+                            }}
+                            className={`p-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                              arrowOrientation === 'esquerda'
+                                ? 'bg-[#1F4E5F] text-white border-[#1F4E5F] shadow-xs'
+                                : 'bg-slate-50 text-[#5B6B76] border-[#E2E6E9] hover:bg-slate-100'
+                            }`}
+                          >
+                            <span>⬅️</span>
+                            <span>Esquerda</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setArrowOrientation('direita')
+                              setArrowRotation(90)
+                            }}
+                            className={`p-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                              arrowOrientation === 'direita'
+                                ? 'bg-[#1F4E5F] text-white border-[#1F4E5F] shadow-xs'
+                                : 'bg-slate-50 text-[#5B6B76] border-[#E2E6E9] hover:bg-slate-100'
+                            }`}
+                          >
+                            <span>➡️</span>
+                            <span>Direita</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setArrowOrientation('personalizado')}
+                            className={`p-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                              arrowOrientation === 'personalizado'
+                                ? 'bg-[#E07A3F] text-white border-[#E07A3F] shadow-xs'
+                                : 'bg-slate-50 text-[#5B6B76] border-[#E2E6E9] hover:bg-slate-100'
+                            }`}
+                          >
+                            <span>🔄</span>
+                            <span>Giro Livre</span>
+                          </button>
+                        </div>
+
+                        {/* Slider de ajuste fino quando rotação livre for ativada */}
+                        {arrowOrientation === 'personalizado' && (
+                          <div className="bg-[#FAF9F6] p-3 rounded-lg border border-[#E2E6E9] space-y-2 mt-2">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-[#5B6B76] font-medium">
+                                Rotação livre da seta:
+                              </span>
+                              <span className="font-bold text-[#E07A3F]">{arrowRotation}°</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="range"
+                                min="-180"
+                                max="180"
+                                value={arrowRotation}
+                                onChange={(e) => setArrowRotation(Number(e.target.value))}
+                                className="flex-1 accent-[#E07A3F] cursor-pointer"
+                              />
+                              <div className="relative w-20 flex-shrink-0">
+                                <Input
+                                  type="number"
+                                  min="-180"
+                                  max="180"
+                                  value={arrowRotation}
+                                  onChange={(e) => {
+                                    const val = Math.max(
+                                      -180,
+                                      Math.min(180, Number(e.target.value) || 0),
+                                    )
+                                    setArrowRotation(val)
+                                  }}
+                                  className="pr-6 text-center text-xs font-semibold rounded-lg border-[#E2E6E9] h-8"
+                                />
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-[#5B6B76]">
+                                  °
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex justify-between text-[10px] text-[#5B6B76]">
+                              <span>-180°</span>
+                              <span>-90° (Esq)</span>
+                              <span>0° (Frente)</span>
+                              <span>+90° (Dir)</span>
+                              <span>+180°</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })()}

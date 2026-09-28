@@ -33,6 +33,10 @@ export const hotspotsService = {
     direction: number
     type?: 'step' | 'door'
     label?: string
+    arrow_size_desktop?: 'pequeno' | 'medio' | 'grande'
+    arrow_size_mobile?: 'pequeno' | 'medio' | 'grande'
+    arrow_orientation?: 'reta' | 'esquerda' | 'direita' | 'personalizado'
+    arrow_rotation?: number
   }): Promise<Hotspot> {
     return await pb.collection('hotspots').create<Hotspot>(data, {
       expand: 'room,target_room,nav_point,target_nav_point',

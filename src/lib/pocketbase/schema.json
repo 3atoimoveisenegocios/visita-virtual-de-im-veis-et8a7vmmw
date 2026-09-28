@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-27T22:50:22.385Z",
+  "generatedAt": "2026-09-28T02:06:32.740Z",
   "collections": [
     {
       "name": "users",
@@ -296,6 +296,33 @@
         {
           "name": "label",
           "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "arrow_size_desktop",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["pequeno", "medio", "grande"]
+        },
+        {
+          "name": "arrow_size_mobile",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["pequeno", "medio", "grande"]
+        },
+        {
+          "name": "arrow_orientation",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["reta", "esquerda", "direita", "personalizado"]
+        },
+        {
+          "name": "arrow_rotation",
+          "type": "number",
           "required": false,
           "system": false
         }

@@ -51,6 +51,9 @@ export interface NavPoint {
   }
 }
 
+export type ArrowSize = 'pequeno' | 'medio' | 'grande'
+export type ArrowOrientation = 'reta' | 'esquerda' | 'direita' | 'personalizado'
+
 export interface Hotspot {
   id: string
   room: string
@@ -60,6 +63,10 @@ export interface Hotspot {
   direction: number // 0 to 360
   type?: 'step' | 'door'
   label?: string
+  arrow_size_desktop?: ArrowSize
+  arrow_size_mobile?: ArrowSize
+  arrow_orientation?: ArrowOrientation
+  arrow_rotation?: number // in degrees
   created: string
   updated: string
   expand?: {
