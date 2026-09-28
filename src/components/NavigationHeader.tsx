@@ -48,14 +48,13 @@ const MENU_ITEMS: NavLinkItem[] = [
 
 export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
   const location = useLocation()
-  const isHome = location.pathname === '/'
   const [scrolled, setScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     const handleScroll = () => {
-      // Quando estiver na home, a barra começa transparente e transiciona após rolar 24px
-      setScrolled(window.scrollY > 24)
+      // Barra branca sólida sempre; aprofunda a sombra suavemente após rolar 16px
+      setScrolled(window.scrollY > 16)
     }
 
     // Checagem imediata caso a página já inicie rolada
@@ -64,11 +63,6 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
-
-  // Na Home: se não rolado, transparente sobre o hero escuro com texto branco.
-  // Se rolado: barra sólida com desfoque de fundo (backdrop-blur) e leve sombra.
-  // Fora da Home: barra sólida consistente para ótima legibilidade.
-  const isTransparent = isHome && !scrolled
 
   const logoUrl = siteSettings?.logo
     ? settingsService.getFileUrl(siteSettings, siteSettings.logo)
@@ -81,10 +75,10 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
   return (
     <header
       className={cn(
-        'fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-in-out',
-        isTransparent
-          ? 'bg-transparent border-b border-white/10 py-3 sm:py-4'
-          : 'bg-[#1C2B36]/95 backdrop-blur-md border-b border-white/10 shadow-lg py-2.5 sm:py-3',
+        'fixed top-0 left-0 right-0 z-50 bg-white border-b border-neutral-200/80 transition-all duration-300 ease-in-out',
+        scrolled
+          ? 'py-2.5 sm:py-3 shadow-[0_4px_24px_rgba(0,0,0,0.10)]'
+          : 'py-3 sm:py-3.5 shadow-[0_2px_16px_rgba(0,0,0,0.06)]',
       )}
     >
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
@@ -105,14 +99,14 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
             />
           ) : (
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1F4E5F] to-[#143743] flex items-center justify-center text-white shadow-md border border-white/10 transition-transform duration-300 group-hover:scale-105 flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1F4E5F] to-[#143743] flex items-center justify-center text-white shadow-md border border-neutral-200 transition-transform duration-300 group-hover:scale-105 flex-shrink-0">
                 <Compass className="w-5 h-5 text-[#E07A3F]" />
               </div>
               <div className="flex flex-col text-left">
-                <span className="font-extrabold text-lg sm:text-xl tracking-tight leading-none text-white drop-shadow-sm">
+                <span className="font-extrabold text-lg sm:text-xl tracking-tight leading-none text-neutral-900 drop-shadow-sm">
                   3° ATO
                 </span>
-                <span className="text-[10px] tracking-wider uppercase text-white/75 font-semibold mt-0.5">
+                <span className="text-[10px] tracking-wider uppercase text-neutral-500 font-semibold mt-0.5">
                   Imóveis & Negócios
                 </span>
               </div>
@@ -127,7 +121,7 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
         >
           {MENU_ITEMS.map((item) => {
             if (!item.isPill) {
-              // Links discretos de texto com sublinhado animado no hover
+              // Links de texto em preto/grafite com sublinhado animado no hover em terracota (#E07A3F)
               const isCurrent = !item.isExternal && location.pathname === item.href
 
               if (item.isExternal) {
@@ -137,11 +131,11 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
                     href={item.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="relative group px-3.5 py-2 text-sm font-medium text-white/90 hover:text-white transition-colors flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E07A3F] rounded-md"
+                    className="relative group px-3.5 py-2 text-sm font-semibold text-neutral-900 hover:text-black transition-colors flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E07A3F] rounded-md"
                   >
                     <span>{item.label}</span>
-                    <ExternalLink className="w-3.5 h-3.5 text-white/60 group-hover:text-white transition-all duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                    {/* Animated underline */}
+                    <ExternalLink className="w-3.5 h-3.5 text-neutral-500 group-hover:text-neutral-900 transition-all duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                    {/* Animated underline terracota (#E07A3F) */}
                     <span className="absolute bottom-1 left-3.5 right-3.5 h-[2px] bg-[#E07A3F] scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left rounded-full" />
                   </a>
                 )
@@ -152,12 +146,12 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
                   key={item.label}
                   to={item.href}
                   className={cn(
-                    'relative group px-3.5 py-2 text-sm font-medium transition-colors flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E07A3F] rounded-md',
-                    isCurrent ? 'text-white font-semibold' : 'text-white/90 hover:text-white',
+                    'relative group px-3.5 py-2 text-sm font-semibold transition-colors flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E07A3F] rounded-md',
+                    isCurrent ? 'text-neutral-950 font-bold' : 'text-neutral-900 hover:text-black',
                   )}
                 >
                   <span>{item.label}</span>
-                  {/* Animated underline */}
+                  {/* Animated underline terracota (#E07A3F) */}
                   <span
                     className={cn(
                       'absolute bottom-1 left-3.5 right-3.5 h-[2px] bg-[#E07A3F] transition-transform duration-300 origin-left rounded-full',
@@ -168,7 +162,8 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
               )
             }
 
-            // Botões-pílula com borda fina translúcida que preenchem suavemente no hover
+            // Botões-pílula pretos (bg-neutral-900, text-white), cantos arredondados, sombra básica, hover suave.
+            // "Portal do Cliente" com borda fina terracota (#E07A3F) para destaque.
             return (
               <a
                 key={item.label}
@@ -176,14 +171,14 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
                 target="_blank"
                 rel="noopener noreferrer"
                 className={cn(
-                  'group inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs lg:text-sm font-semibold transition-all duration-300 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+                  'group inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs lg:text-sm font-semibold text-white transition-all duration-300 shadow-sm hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-neutral-900 hover:-translate-y-0.5 active:translate-y-0',
                   item.primary
-                    ? 'bg-[#1F4E5F]/80 hover:bg-[#1F4E5F] text-white border border-[#30687d]/80 hover:border-[#418ba6] hover:shadow-md hover:shadow-[#1F4E5F]/30 focus-visible:ring-[#1F4E5F]'
-                    : 'bg-white/10 hover:bg-white/20 text-white border border-white/25 hover:border-white/40 hover:shadow-md focus-visible:ring-white',
+                    ? 'bg-neutral-900 hover:bg-black border border-[#E07A3F] hover:border-[#E07A3F] shadow-sm hover:shadow-[0_4px_12px_rgba(224,122,63,0.25)]'
+                    : 'bg-neutral-900 hover:bg-black border border-neutral-800 hover:border-neutral-700',
                 )}
               >
                 <span>{item.label}</span>
-                <ExternalLink className="w-3.5 h-3.5 opacity-70 group-hover:opacity-100 transition-all duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                <ExternalLink className="w-3.5 h-3.5 text-neutral-300 group-hover:text-white transition-all duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
               </a>
             )
           })}
@@ -195,7 +190,7 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
             <SheetTrigger asChild>
               <button
                 type="button"
-                className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E07A3F] transition-colors"
+                className="p-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-900 border border-neutral-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E07A3F] transition-colors shadow-xs"
                 aria-label="Abrir menu de navegação"
               >
                 <Menu className="w-5 h-5" />
@@ -203,11 +198,11 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
             </SheetTrigger>
             <SheetContent
               side="right"
-              className="w-[300px] sm:w-[360px] bg-[#1C2B36] text-white border-l border-white/10 p-0 flex flex-col justify-between"
+              className="w-[300px] sm:w-[360px] bg-white text-neutral-900 border-l border-neutral-200 p-0 flex flex-col justify-between shadow-2xl"
             >
               <div>
-                <SheetHeader className="p-6 border-b border-white/10 text-left flex flex-row items-center justify-between">
-                  <SheetTitle className="text-white text-lg font-bold flex items-center gap-2">
+                <SheetHeader className="p-6 border-b border-neutral-200/80 text-left flex flex-row items-center justify-between">
+                  <SheetTitle className="text-neutral-900 text-lg font-bold flex items-center gap-2">
                     {logoUrl ? (
                       <img
                         src={logoUrl}
@@ -233,8 +228,8 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
                     className={cn(
                       'flex items-center justify-between p-3.5 rounded-xl text-base font-semibold transition-all',
                       location.pathname === '/'
-                        ? 'bg-[#1F4E5F] text-white'
-                        : 'text-white/90 hover:bg-white/10 hover:text-white',
+                        ? 'bg-neutral-100 text-neutral-950 font-bold border-l-4 border-[#E07A3F]'
+                        : 'text-neutral-900 hover:bg-neutral-100 hover:text-black',
                     )}
                   >
                     <span>Home</span>
@@ -246,14 +241,14 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center justify-between p-3.5 rounded-xl text-base font-semibold text-white/90 hover:bg-white/10 hover:text-white transition-all"
+                    className="flex items-center justify-between p-3.5 rounded-xl text-base font-semibold text-neutral-900 hover:bg-neutral-100 hover:text-black transition-all"
                   >
                     <span>Site Principal</span>
-                    <ExternalLink className="w-4 h-4 text-white/50" />
+                    <ExternalLink className="w-4 h-4 text-neutral-500" />
                   </a>
 
                   <div className="pt-3 pb-1">
-                    <div className="h-px bg-white/10" />
+                    <div className="h-px bg-neutral-200" />
                   </div>
 
                   {/* Item 3: Cadastre seu Imóvel */}
@@ -262,10 +257,10 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center justify-between p-3.5 rounded-xl text-base font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all shadow-sm"
+                    className="flex items-center justify-between p-3.5 rounded-full text-base font-semibold bg-neutral-900 hover:bg-black text-white border border-neutral-800 transition-all shadow-sm px-5"
                   >
                     <span>Cadastre seu Imóvel</span>
-                    <ExternalLink className="w-4 h-4 text-[#E07A3F]" />
+                    <ExternalLink className="w-4 h-4 text-white/80" />
                   </a>
 
                   {/* Item 4: Portal do Cliente */}
@@ -274,7 +269,7 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center justify-between p-3.5 rounded-xl text-base font-semibold bg-gradient-to-r from-[#1F4E5F] to-[#276479] hover:from-[#19404e] hover:to-[#1F4E5F] text-white border border-[#30687d] transition-all shadow-md"
+                    className="flex items-center justify-between p-3.5 rounded-full text-base font-semibold bg-neutral-900 hover:bg-black text-white border border-[#E07A3F] transition-all shadow-md px-5"
                   >
                     <span>Portal do Cliente</span>
                     <ExternalLink className="w-4 h-4 text-[#E07A3F]" />
@@ -283,8 +278,8 @@ export function NavigationHeader({ siteSettings }: NavigationHeaderProps) {
               </div>
 
               {/* Mobile Drawer Footer with Contact Info */}
-              <div className="p-6 border-t border-white/10 bg-black/20 text-xs text-white/60 space-y-2">
-                <p className="font-semibold text-white/80">3° ATO IMÓVEIS E NEGÓCIOS</p>
+              <div className="p-6 border-t border-neutral-200 bg-neutral-50 text-xs text-neutral-600 space-y-2">
+                <p className="font-semibold text-neutral-900">3° ATO IMÓVEIS E NEGÓCIOS</p>
                 <p>CRECI: 50383-J</p>
                 <a
                   href="https://wa.me/551144227729"
