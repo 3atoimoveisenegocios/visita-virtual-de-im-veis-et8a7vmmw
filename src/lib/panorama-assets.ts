@@ -28,7 +28,7 @@ export function getRoomPanoramaUrl(
   }
 
   const pName = (pointName || '').toLowerCase()
-  const name = roomName.toLowerCase()
+  const name = (roomName || '').toLowerCase()
 
   // Specific check for point variations within a room
   if (pName.includes('jantar')) {
@@ -64,6 +64,32 @@ export function getRoomPanoramaUrl(
   }
   // Default to living room
   return DEMO_PANORAMAS.equirect_living
+}
+
+/**
+ * Resolves the display panorama or thumbnail image for a NavPoint.
+ * Priority order:
+ * 1. NavPoint's own uploaded photo
+ * 2. Parent room's uploaded photo (if point has no photo of its own)
+ * 3. Demo panorama as LAST resort (only when neither point nor room has photo)
+ */
+export function resolveNavPointImageUrl(params: {
+  pointPanoramaUrl?: string | null
+  roomPanoramaUrl?: string | null
+  roomName?: string
+  pointName?: string
+}): string {
+  const { pointPanoramaUrl, roomPanoramaUrl, roomName = '', pointName = '' } = params
+
+  if (pointPanoramaUrl && pointPanoramaUrl.trim() !== '') {
+    return pointPanoramaUrl
+  }
+
+  if (roomPanoramaUrl && roomPanoramaUrl.trim() !== '') {
+    return roomPanoramaUrl
+  }
+
+  return getRoomPanoramaUrl(roomName, undefined, pointName)
 }
 
 /**

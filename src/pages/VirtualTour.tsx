@@ -7,7 +7,7 @@ import { navPointsService } from '@/services/navPoints'
 import { interactionsService } from '@/services/interactions'
 import type { Property, Room, Hotspot, NavPoint } from '@/types'
 import { PanoramaViewer } from '@/components/tour/PanoramaViewer'
-import { getRoomPanoramaUrl, generateDemoFloorPlan } from '@/lib/panorama-assets'
+import { getRoomPanoramaUrl, resolveNavPointImageUrl } from '@/lib/panorama-assets'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -510,8 +510,12 @@ export default function VirtualTour() {
   const roomPanoramaUrl = currentRoom.panorama_image
     ? roomsService.getFileUrl(currentRoom, currentRoom.panorama_image)
     : ''
-  const activeUploadedUrl = pointPanoramaUrl || roomPanoramaUrl
-  const panoramaUrl = getRoomPanoramaUrl(currentRoom.name, activeUploadedUrl, currentPoint?.name)
+  const panoramaUrl = resolveNavPointImageUrl({
+    pointPanoramaUrl,
+    roomPanoramaUrl,
+    roomName: currentRoom.name,
+    pointName: currentPoint?.name,
+  })
 
   return (
     <div className="w-full max-w-[1360px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 flex flex-col gap-4 font-['Inter']">
@@ -651,16 +655,18 @@ export default function VirtualTour() {
               )}
             </div>
 
-            {/* Botão Planta discreto */}
-            <Button
-              size="sm"
-              onClick={handleOpenFloorPlan}
-              className="bg-black/65 hover:bg-black/85 backdrop-blur-md text-white/90 hover:text-white border border-white/15 rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 h-8 sm:h-auto text-xs font-semibold"
-              title="Abrir planta interativa"
-            >
-              <Map className="w-3.5 h-3.5 text-[#E07A3F]" />
-              <span className="hidden sm:inline">Planta</span>
-            </Button>
+            {/* Botão Planta discreto (visível apenas se o imóvel possui imagem de planta cadastrada) */}
+            {property.floor_plan_image && (
+              <Button
+                size="sm"
+                onClick={handleOpenFloorPlan}
+                className="bg-black/65 hover:bg-black/85 backdrop-blur-md text-white/90 hover:text-white border border-white/15 rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 h-8 sm:h-auto text-xs font-semibold"
+                title="Abrir planta interativa"
+              >
+                <Map className="w-3.5 h-3.5 text-[#E07A3F]" />
+                <span className="hidden sm:inline">Planta</span>
+              </Button>
+            )}
           </div>
         </div>
 
@@ -703,11 +709,15 @@ export default function VirtualTour() {
                 <div className="flex flex-col gap-2">
                   {roomPoints.map((pt) => {
                     const isActive = pt.id === currentPoint?.id
-                    const ptThumb = pt.panorama_image
+                    const ptPanoramaUrl = pt.panorama_image
                       ? navPointsService.getFileUrl(pt, pt.panorama_image)
-                      : currentRoom.panorama_image
-                        ? roomsService.getFileUrl(currentRoom, currentRoom.panorama_image)
-                        : getRoomPanoramaUrl(currentRoom.name, undefined, pt.name)
+                      : ''
+                    const ptThumb = resolveNavPointImageUrl({
+                      pointPanoramaUrl: ptPanoramaUrl,
+                      roomPanoramaUrl,
+                      roomName: currentRoom.name,
+                      pointName: pt.name,
+                    })
 
                     return (
                       <button
@@ -780,51 +790,41 @@ export default function VirtualTour() {
               )}
             </div>
 
-            {/* Mini preview da Planta Ancorada no painel lateral */}
-            <div className="space-y-2 pt-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-white/80 flex items-center gap-1.5">
-                  <Map className="w-3.5 h-3.5 text-[#E07A3F]" />
-                  Planta do Imóvel
-                </span>
-                <button
-                  type="button"
-                  onClick={handleOpenFloorPlan}
-                  className="text-[11px] text-[#E07A3F] hover:underline font-semibold"
-                >
-                  Ampliar
-                </button>
-              </div>
+            {/* Mini preview da Planta Ancorada no painel lateral (visível apenas se houver foto de planta enviada) */}
+            {property.floor_plan_image && (
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-white/80 flex items-center gap-1.5">
+                    <Map className="w-3.5 h-3.5 text-[#E07A3F]" />
+                    Planta do Imóvel
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleOpenFloorPlan}
+                    className="text-[11px] text-[#E07A3F] hover:underline font-semibold"
+                  >
+                    Ampliar
+                  </button>
+                </div>
 
-              <div
-                onClick={handleOpenFloorPlan}
-                className="relative bg-[#FAF9F6] rounded-2xl overflow-hidden border border-white/10 cursor-pointer shadow-inner group/plan h-36 flex items-center justify-center p-2"
-                title="Clique para abrir planta completa"
-              >
-                {property.floor_plan_image ? (
+                <div
+                  onClick={handleOpenFloorPlan}
+                  className="relative bg-[#FAF9F6] rounded-2xl overflow-hidden border border-white/10 cursor-pointer shadow-inner group/plan h-36 flex items-center justify-center p-2"
+                  title="Clique para abrir planta completa"
+                >
                   <img
                     src={propertiesService.getFileUrl(property, property.floor_plan_image)}
                     alt="Planta do Imóvel"
                     className="max-h-full max-w-full object-contain transition-transform group-hover/plan:scale-105"
                   />
-                ) : (
-                  <div
-                    className="w-full h-full scale-90 transition-transform group-hover/plan:scale-95 pointer-events-none"
-                    dangerouslySetInnerHTML={{
-                      __html: generateDemoFloorPlan(
-                        property.title,
-                        rooms.map((r) => ({ id: r.id, name: r.name })),
-                      ),
-                    }}
-                  />
-                )}
-                <div className="absolute inset-0 bg-[#1C2B36]/20 opacity-0 group-hover/plan:opacity-100 transition-opacity flex items-center justify-center">
-                  <span className="bg-[#1C2B36]/90 text-white text-[11px] font-bold px-3 py-1.5 rounded-full border border-white/20 shadow-md">
-                    Abrir Planta
-                  </span>
+                  <div className="absolute inset-0 bg-[#1C2B36]/20 opacity-0 group-hover/plan:opacity-100 transition-opacity flex items-center justify-center">
+                    <span className="bg-[#1C2B36]/90 text-white text-[11px] font-bold px-3 py-1.5 rounded-full border border-white/20 shadow-md">
+                      Abrir Planta
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* BOTÃO 'COMPARTILHAR ESTE AMBIENTE' (Item 4 do pacote aprovado) */}
             <div className="pt-1 flex flex-col gap-2">
@@ -935,25 +935,25 @@ export default function VirtualTour() {
       </div>
 
       {/* ===================== MODAL DA PLANTA INTERATIVA ===================== */}
-      <Sheet open={floorPlanOpen} onOpenChange={setFloorPlanOpen}>
-        <SheetContent
-          side="right"
-          className="w-full sm:max-w-md bg-[#1C2B36] text-white border-l border-white/10 p-6 flex flex-col justify-between"
-        >
-          <div>
-            <SheetHeader className="mb-5 text-left">
-              <SheetTitle className="text-white flex items-center gap-2 text-xl font-bold">
-                <Map className="w-5 h-5 text-[#E07A3F]" />
-                <span>Planta Interativa</span>
-              </SheetTitle>
-              <p className="text-xs text-white/60">
-                Clique nos ambientes na planta para navegar instantaneamente
-              </p>
-            </SheetHeader>
+      {property.floor_plan_image && (
+        <Sheet open={floorPlanOpen} onOpenChange={setFloorPlanOpen}>
+          <SheetContent
+            side="right"
+            className="w-full sm:max-w-md bg-[#1C2B36] text-white border-l border-white/10 p-6 flex flex-col justify-between"
+          >
+            <div>
+              <SheetHeader className="mb-5 text-left">
+                <SheetTitle className="text-white flex items-center gap-2 text-xl font-bold">
+                  <Map className="w-5 h-5 text-[#E07A3F]" />
+                  <span>Planta Interativa</span>
+                </SheetTitle>
+                <p className="text-xs text-white/60">
+                  Clique nos ambientes na planta para navegar instantaneamente
+                </p>
+              </SheetHeader>
 
-            {/* Visualização da Planta */}
-            <div className="bg-[#FAF9F6] rounded-2xl p-3 border border-white/10 shadow-inner overflow-hidden mb-4 relative">
-              {property.floor_plan_image ? (
+              {/* Visualização da Planta */}
+              <div className="bg-[#FAF9F6] rounded-2xl p-3 border border-white/10 shadow-inner overflow-hidden mb-4 relative">
                 <div className="relative">
                   <img
                     src={propertiesService.getFileUrl(property, property.floor_plan_image)}
@@ -961,134 +961,94 @@ export default function VirtualTour() {
                     className="w-full h-auto rounded-lg object-contain"
                   />
                 </div>
-              ) : (
-                <div className="relative w-full h-64 rounded-lg overflow-hidden flex items-center justify-center">
-                  <div
-                    className="w-full h-full"
-                    dangerouslySetInnerHTML={{
-                      __html: generateDemoFloorPlan(
-                        property.title,
-                        rooms.map((r) => ({ id: r.id, name: r.name })),
-                      ),
-                    }}
-                  />
-                  {/* Marcadores dos pontos do cômodo atual */}
-                  <div className="absolute inset-0 pointer-events-auto">
-                    {roomPoints.map((pt) => {
-                      const isCurrent = pt.id === currentPoint?.id
-                      const posX = pt.pos_x ?? 50
-                      const posY = pt.pos_y ?? 50
+              </div>
 
-                      return (
+              {/* Lista de Ambientes e Pontos */}
+              <div className="space-y-3">
+                <div className="text-xs uppercase tracking-wider text-white/50 font-bold mb-1">
+                  Selecione o cômodo e o ponto
+                </div>
+                <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1">
+                  {rooms.map((r) => {
+                    const isActive = r.id === currentRoom.id
+                    const rPoints = allNavPoints.filter((p) => p.room === r.id)
+
+                    return (
+                      <div key={r.id} className="space-y-1">
                         <button
-                          key={pt.id}
                           onClick={() => {
-                            navigateToPoint(pt, currentRoom)
+                            changeRoom(r.id)
                             setFloorPlanOpen(false)
                           }}
-                          className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full p-1.5 transition-all shadow-lg flex items-center justify-center ${
-                            isCurrent
-                              ? 'bg-[#E07A3F] text-white ring-4 ring-[#E07A3F]/30 scale-125 z-10'
-                              : 'bg-[#1F4E5F] text-white hover:bg-[#E07A3F] hover:scale-110'
+                          className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left text-xs transition-colors border ${
+                            isActive
+                              ? 'bg-[#E07A3F] border-[#E07A3F] text-white font-bold'
+                              : 'bg-white/5 border-white/10 text-white/80 hover:bg-white/10 hover:text-white'
                           }`}
-                          style={{ left: `${posX}%`, top: `${posY}%` }}
-                          title={pt.name}
                         >
-                          <Footprints className="w-3 h-3" />
-                          <span className="sr-only">{pt.name}</span>
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`w-2 h-2 rounded-full ${
+                                isActive ? 'bg-white' : 'bg-[#E07A3F]'
+                              }`}
+                            />
+                            <span>{r.name}</span>
+                          </div>
+                          {r.dimensions && (
+                            <span className="text-[10px] opacity-75">{r.dimensions}</span>
+                          )}
                         </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
 
-            {/* Lista de Ambientes e Pontos */}
-            <div className="space-y-3">
-              <div className="text-xs uppercase tracking-wider text-white/50 font-bold mb-1">
-                Selecione o cômodo e o ponto
-              </div>
-              <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1">
-                {rooms.map((r) => {
-                  const isActive = r.id === currentRoom.id
-                  const rPoints = allNavPoints.filter((p) => p.room === r.id)
-
-                  return (
-                    <div key={r.id} className="space-y-1">
-                      <button
-                        onClick={() => {
-                          changeRoom(r.id)
-                          setFloorPlanOpen(false)
-                        }}
-                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left text-xs transition-colors border ${
-                          isActive
-                            ? 'bg-[#E07A3F] border-[#E07A3F] text-white font-bold'
-                            : 'bg-white/5 border-white/10 text-white/80 hover:bg-white/10 hover:text-white'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`w-2 h-2 rounded-full ${
-                              isActive ? 'bg-white' : 'bg-[#E07A3F]'
-                            }`}
-                          />
-                          <span>{r.name}</span>
-                        </div>
-                        {r.dimensions && (
-                          <span className="text-[10px] opacity-75">{r.dimensions}</span>
+                        {isActive && rPoints.length > 1 && (
+                          <div className="grid grid-cols-1 gap-1 pl-4 pt-1">
+                            {rPoints.map((pt) => {
+                              const isPtActive = pt.id === currentPoint?.id
+                              return (
+                                <button
+                                  key={pt.id}
+                                  onClick={() => {
+                                    navigateToPoint(pt, r)
+                                    setFloorPlanOpen(false)
+                                  }}
+                                  className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-left text-[11px] transition-colors border ${
+                                    isPtActive
+                                      ? 'bg-white/20 border-white/30 text-white font-bold'
+                                      : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <Footprints className="w-3 h-3 text-[#E07A3F]" />
+                                    <span>{pt.name}</span>
+                                  </div>
+                                  {isPtActive && (
+                                    <Badge className="bg-[#E07A3F] text-[9px] h-4 px-1.5">
+                                      Atual
+                                    </Badge>
+                                  )}
+                                </button>
+                              )
+                            })}
+                          </div>
                         )}
-                      </button>
-
-                      {isActive && rPoints.length > 1 && (
-                        <div className="grid grid-cols-1 gap-1 pl-4 pt-1">
-                          {rPoints.map((pt) => {
-                            const isPtActive = pt.id === currentPoint?.id
-                            return (
-                              <button
-                                key={pt.id}
-                                onClick={() => {
-                                  navigateToPoint(pt, r)
-                                  setFloorPlanOpen(false)
-                                }}
-                                className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-left text-[11px] transition-colors border ${
-                                  isPtActive
-                                    ? 'bg-white/20 border-white/30 text-white font-bold'
-                                    : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white'
-                                }`}
-                              >
-                                <div className="flex items-center gap-1.5">
-                                  <Footprints className="w-3 h-3 text-[#E07A3F]" />
-                                  <span>{pt.name}</span>
-                                </div>
-                                {isPtActive && (
-                                  <Badge className="bg-[#E07A3F] text-[9px] h-4 px-1.5">
-                                    Atual
-                                  </Badge>
-                                )}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="pt-5 border-t border-white/10">
-            <Button
-              onClick={handleWhatsAppClick}
-              className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold py-5 rounded-xl shadow-md text-xs"
-            >
-              <MessageCircle className="w-4 h-4 mr-2" />
-              Tirar dúvidas sobre a planta no WhatsApp
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+            <div className="pt-5 border-t border-white/10">
+              <Button
+                onClick={handleWhatsAppClick}
+                className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold py-5 rounded-xl shadow-md text-xs"
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Tirar dúvidas sobre a planta no WhatsApp
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
 
       {/* ===================== MODAL DE INFORMAÇÕES DO AMBIENTE ===================== */}
       <Sheet open={infoOpen} onOpenChange={setInfoOpen}>

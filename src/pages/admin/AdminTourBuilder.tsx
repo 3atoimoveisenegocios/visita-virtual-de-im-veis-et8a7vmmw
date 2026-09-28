@@ -5,7 +5,11 @@ import { propertiesService } from '@/services/properties'
 import { roomsService } from '@/services/rooms'
 import { navPointsService } from '@/services/navPoints'
 import { hotspotsService } from '@/services/hotspots'
-import { getRoomPanoramaUrl, generateDemoFloorPlan } from '@/lib/panorama-assets'
+import {
+  getRoomPanoramaUrl,
+  generateDemoFloorPlan,
+  resolveNavPointImageUrl,
+} from '@/lib/panorama-assets'
 import { PanoramaDirectionPicker } from '@/components/tour/PanoramaDirectionPicker'
 import { inspectPanoramaFile, PanoramaInspectionResult } from '@/lib/panorama-xmp'
 import type { Property, Room, NavPoint, Hotspot } from '@/types'
@@ -785,9 +789,18 @@ export default function AdminTourBuilder() {
 
                           <div className="grid grid-cols-1 gap-2.5">
                             {roomPts.map((pt, idx) => {
-                              const ptThumb = pt.panorama_image
+                              const ptPanoramaUrl = pt.panorama_image
                                 ? navPointsService.getFileUrl(pt, pt.panorama_image)
-                                : getRoomPanoramaUrl(room.name, '', pt.name)
+                                : ''
+                              const roomPanoramaUrl = room.panorama_image
+                                ? roomsService.getFileUrl(room, room.panorama_image)
+                                : ''
+                              const ptThumb = resolveNavPointImageUrl({
+                                pointPanoramaUrl: ptPanoramaUrl,
+                                roomPanoramaUrl: roomPanoramaUrl,
+                                roomName: room.name,
+                                pointName: pt.name,
+                              })
 
                               // Outgoing hotspots from this specific point
                               const pointOutgoing = roomHs.filter(
@@ -1346,14 +1359,16 @@ export default function AdminTourBuilder() {
               {(() => {
                 const pointImgUrl = editingPoint?.panorama_image
                   ? navPointsService.getFileUrl(editingPoint, editingPoint.panorama_image)
-                  : targetRoomForPoint?.panorama_image
-                    ? roomsService.getFileUrl(targetRoomForPoint, targetRoomForPoint.panorama_image)
-                    : ''
-                const previewUrl = getRoomPanoramaUrl(
-                  targetRoomForPoint?.name || 'Ambiente',
-                  pointImgUrl,
-                  pointName || editingPoint?.name,
-                )
+                  : ''
+                const roomImgUrl = targetRoomForPoint?.panorama_image
+                  ? roomsService.getFileUrl(targetRoomForPoint, targetRoomForPoint.panorama_image)
+                  : ''
+                const previewUrl = resolveNavPointImageUrl({
+                  pointPanoramaUrl: pointImgUrl,
+                  roomPanoramaUrl: roomImgUrl,
+                  roomName: targetRoomForPoint?.name || 'Ambiente',
+                  pointName: pointName || editingPoint?.name,
+                })
 
                 return (
                   <div className="space-y-2">
@@ -1589,11 +1604,12 @@ export default function AdminTourBuilder() {
               const roomPanorama = selectedSourceRoom?.panorama_image
                 ? roomsService.getFileUrl(selectedSourceRoom, selectedSourceRoom.panorama_image)
                 : ''
-              const activePanoramaUrl = getRoomPanoramaUrl(
-                selectedSourceRoom?.name || '',
-                pointPanorama || roomPanorama,
-                currentSrcPoint?.name,
-              )
+              const activePanoramaUrl = resolveNavPointImageUrl({
+                pointPanoramaUrl: pointPanorama,
+                roomPanoramaUrl: roomPanorama,
+                roomName: selectedSourceRoom?.name || '',
+                pointName: currentSrcPoint?.name,
+              })
 
               const targetPointObj = navPoints.find((p) => p.id === targetPointId)
               const targetRoomObj = rooms.find((r) => r.id === targetRoomId)
