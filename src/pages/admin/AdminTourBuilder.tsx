@@ -395,8 +395,8 @@ export default function AdminTourBuilder() {
                 pitch: defaultPitch,
                 type: 'step',
                 label: `Ir para ${created.name}`,
-                arrow_size_desktop: 'pequeno',
-                arrow_size_mobile: 'pequeno',
+                arrow_size_desktop: 'medio',
+                arrow_size_mobile: 'medio',
                 arrow_orientation: 'reta',
                 arrow_rotation: 0,
               })
@@ -434,8 +434,8 @@ export default function AdminTourBuilder() {
                     pitch: defaultPitch,
                     type: 'step',
                     label: `Voltar para ${originPoint.name}`,
-                    arrow_size_desktop: 'pequeno',
-                    arrow_size_mobile: 'pequeno',
+                    arrow_size_desktop: 'medio',
+                    arrow_size_mobile: 'medio',
                     arrow_orientation: 'reta',
                     arrow_rotation: 0,
                   })
