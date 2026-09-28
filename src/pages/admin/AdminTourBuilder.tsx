@@ -85,6 +85,9 @@ export default function AdminTourBuilder() {
   // Add/Edit Nav Point Modal
   const [pointModalOpen, setPointModalOpen] = useState(false)
   const [targetRoomForPoint, setTargetRoomForPoint] = useState<Room | null>(null)
+  const [activeSourcePointForNewPoint, setActiveSourcePointForNewPoint] = useState<NavPoint | null>(
+    null,
+  )
   const [editingPoint, setEditingPoint] = useState<NavPoint | null>(null)
   const [pointName, setPointName] = useState('')
   const [pointPanoramaFile, setPointPanoramaFile] = useState<File | null>(null)
@@ -252,8 +255,9 @@ export default function AdminTourBuilder() {
   }
 
   // ================= NAV POINT HANDLERS =================
-  const handleOpenAddPoint = (room: Room) => {
+  const handleOpenAddPoint = (room: Room, sourcePoint?: NavPoint) => {
     setTargetRoomForPoint(room)
+    setActiveSourcePointForNewPoint(sourcePoint || null)
     setEditingPoint(null)
     setPointName('')
     setPointPanoramaFile(null)
@@ -271,6 +275,7 @@ export default function AdminTourBuilder() {
 
   const handleOpenEditPoint = (point: NavPoint, room: Room) => {
     setTargetRoomForPoint(room)
+    setActiveSourcePointForNewPoint(null)
     setEditingPoint(point)
     setPointName(point.name)
     setPointPanoramaFile(null)
@@ -337,10 +342,82 @@ export default function AdminTourBuilder() {
         formData.append('order', (roomPts.length + 1).toString())
         const created = await navPointsService.createNavPoint(formData)
         setNavPoints((prev) => [...prev, created])
-        toast.success(`Novo ponto "${created.name}" adicionado ao cômodo!`)
+
+        // Determinar o ponto de visão atual/origem para conectar a seta automaticamente
+        // 1. Ponto ativo de onde o usuário abriu a criação (activeSourcePointForNewPoint)
+        // 2. Ou ponto marcado como entrada do cômodo (is_entry)
+        // 3. Ou o primeiro ponto de visão existente no cômodo
+        const originPoint =
+          (activeSourcePointForNewPoint &&
+            activeSourcePointForNewPoint.room === targetRoomForPoint.id &&
+            activeSourcePointForNewPoint.id !== created.id &&
+            activeSourcePointForNewPoint) ||
+          roomPts.find((p) => p.is_entry && p.id !== created.id) ||
+          roomPts.find((p) => p.id !== created.id)
+
+        let autoHotspotCreated = false
+        if (originPoint) {
+          try {
+            // Verificar se já existe conexão direta entre o ponto de origem e o novo ponto
+            const alreadyExists = hotspots.some(
+              (h) =>
+                h.room === targetRoomForPoint.id &&
+                h.nav_point === originPoint.id &&
+                h.target_nav_point === created.id,
+            )
+
+            if (!alreadyExists) {
+              const defaultPitch = -16
+              const defaultDirection = originPoint.initial_yaw ?? 0
+              const autoHotspot = await hotspotsService.createHotspot({
+                room: targetRoomForPoint.id,
+                target_room: targetRoomForPoint.id,
+                nav_point: originPoint.id,
+                target_nav_point: created.id,
+                direction: Math.round((defaultDirection + 360) % 360),
+                pitch: defaultPitch,
+                type: 'step',
+                label: `Ir para ${created.name}`,
+                arrow_size_desktop: 'medio',
+                arrow_size_mobile: 'medio',
+                arrow_orientation: 'reta',
+                arrow_rotation: 0,
+              })
+
+              const autoHotspotWithExpand: Hotspot = {
+                ...autoHotspot,
+                expand: {
+                  room: targetRoomForPoint,
+                  target_room: targetRoomForPoint,
+                  nav_point: originPoint,
+                  target_nav_point: created,
+                },
+              }
+
+              setHotspots((prev) => [...prev, autoHotspotWithExpand])
+              autoHotspotCreated = true
+            }
+          } catch (autoErr: any) {
+            // Se a criação automática da conexão falhar por qualquer motivo,
+            // o salvamento do ponto NÃO deve falhar — apenas registrar aviso e seguir.
+            console.warn(
+              'Aviso: Não foi possível criar automaticamente a conexão para o novo ponto:',
+              autoErr,
+            )
+          }
+        }
+
+        if (autoHotspotCreated && originPoint) {
+          toast.success(
+            `Novo ponto "${created.name}" adicionado com seta automática a partir de "${originPoint.name}"!`,
+          )
+        } else {
+          toast.success(`Novo ponto "${created.name}" adicionado ao cômodo!`)
+        }
       }
 
       setPointModalOpen(false)
+      setActiveSourcePointForNewPoint(null)
     } catch (err: any) {
       toast.error('Erro ao salvar ponto: ' + (err?.message || ''))
     } finally {
@@ -884,6 +961,16 @@ export default function AdminTourBuilder() {
                                     </div>
 
                                     <div className="flex items-center gap-1.5 self-end sm:self-center">
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleOpenAddPoint(room, pt)}
+                                        className="h-6 text-[11px] text-[#E07A3F] hover:bg-[#E07A3F]/10 px-2"
+                                        title="Adicionar novo ponto conectado a partir deste"
+                                      >
+                                        <Plus className="w-3 h-3 mr-1" />
+                                        Novo Ponto Daqui
+                                      </Button>
                                       {connectionMode && (
                                         <Button
                                           size="sm"
@@ -1273,6 +1360,24 @@ export default function AdminTourBuilder() {
             </DialogTitle>
             <p className="text-xs text-[#5B6B76]">
               Ambiente: <strong>{targetRoomForPoint?.name}</strong>
+              {!editingPoint && (
+                <>
+                  {' • '}
+                  <span>
+                    Conexão automática a partir de:{' '}
+                    <strong>
+                      {activeSourcePointForNewPoint
+                        ? activeSourcePointForNewPoint.name
+                        : targetRoomForPoint
+                          ? navPoints.find((p) => p.room === targetRoomForPoint.id && p.is_entry)
+                              ?.name ||
+                            navPoints.find((p) => p.room === targetRoomForPoint.id)?.name ||
+                            'Ponto Principal'
+                          : 'Ponto do cômodo'}
+                    </strong>
+                  </span>
+                </>
+              )}
             </p>
           </DialogHeader>
 
