@@ -26,6 +26,8 @@ import {
   Sparkles,
   Volume2,
   VolumeX,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -41,6 +43,30 @@ export default function VirtualTour() {
   const [currentPoint, setCurrentPoint] = useState<NavPoint | null>(null)
   const [roomPoints, setRoomPoints] = useState<NavPoint[]>([])
   const [currentHotspots, setCurrentHotspots] = useState<Hotspot[]>([])
+  const [isDescExpanded, setIsDescExpanded] = useState(false)
+  const [isDescClamped, setIsDescClamped] = useState(false)
+  const descRef = useRef<HTMLParagraphElement>(null)
+
+  // Reset description expand state whenever room changes
+  useEffect(() => {
+    setIsDescExpanded(false)
+  }, [currentRoom?.id])
+
+  // Check if current room description overflows its container (~4 lines)
+  useEffect(() => {
+    const el = descRef.current
+    if (!el || !currentRoom?.description) {
+      setIsDescClamped(false)
+      return
+    }
+    const checkOverflow = () => {
+      // scrollHeight > clientHeight indicates the text exceeds the clamped container
+      setIsDescClamped(el.scrollHeight > el.clientHeight + 1)
+    }
+    checkOverflow()
+    window.addEventListener('resize', checkOverflow)
+    return () => window.removeEventListener('resize', checkOverflow)
+  }, [currentRoom?.description, isDescExpanded])
 
   // Panels & Fullscreen state
   const [floorPlanOpen, setFloorPlanOpen] = useState(false)
@@ -887,9 +913,31 @@ export default function VirtualTour() {
               )}
 
               {currentRoom.description && (
-                <p className="text-xs text-white/70 leading-relaxed bg-white/5 p-3 rounded-xl border border-white/10 line-clamp-3">
-                  {currentRoom.description}
-                </p>
+                <div className="bg-white/5 p-3 rounded-xl border border-white/10 transition-all duration-200">
+                  <p
+                    ref={descRef}
+                    className={cn(
+                      'text-xs text-white/70 leading-relaxed break-words',
+                      !isDescExpanded && 'line-clamp-4',
+                    )}
+                  >
+                    {currentRoom.description}
+                  </p>
+                  {(isDescClamped || isDescExpanded) && (
+                    <button
+                      type="button"
+                      onClick={() => setIsDescExpanded((prev) => !prev)}
+                      className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-[#E07A3F] hover:text-[#f2955d] transition-colors focus:outline-none"
+                    >
+                      <span>{isDescExpanded ? 'Ver menos' : 'Ver mais'}</span>
+                      {isDescExpanded ? (
+                        <ChevronUp className="w-3 h-3" />
+                      ) : (
+                        <ChevronDown className="w-3 h-3" />
+                      )}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
