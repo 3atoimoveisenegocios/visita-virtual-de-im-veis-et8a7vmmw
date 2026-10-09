@@ -56,6 +56,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { EmbedCodeButton } from '@/components/admin/EmbedCodeButton'
 
 export default function AdminTourBuilder() {
   const { id } = useParams<{ id: string }>()
@@ -723,10 +724,19 @@ export default function AdminTourBuilder() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <EmbedCodeButton
+            propertyId={property.id}
+            propertyTitle={property.title}
+            variant="outline"
+            size="sm"
+            className="border-[#E2E6E9] text-[#1C2B36] hover:bg-slate-100 text-xs shadow-sm h-9"
+            showText={true}
+          />
+
           <Button
             asChild
-            className="bg-[#E07A3F] hover:bg-[#d06d33] text-white text-xs font-semibold shadow-sm"
+            className="bg-[#E07A3F] hover:bg-[#d06d33] text-white text-xs font-semibold shadow-sm h-9"
           >
             <Link to={`/visita/${property.id}`} target="_blank">
               <ExternalLink className="w-3.5 h-3.5 mr-1.5" />

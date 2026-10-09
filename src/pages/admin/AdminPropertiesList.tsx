@@ -27,6 +27,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { EmbedCodeButton } from '@/components/admin/EmbedCodeButton'
 
 export default function AdminPropertiesList() {
   const navigate = useNavigate()
@@ -252,6 +253,15 @@ export default function AdminPropertiesList() {
                         Editar
                       </Link>
                     </Button>
+
+                    <EmbedCodeButton
+                      propertyId={prop.id}
+                      propertyTitle={prop.title}
+                      variant="outline"
+                      size="sm"
+                      className="border-[#E2E6E9] text-[#1C2B36] hover:bg-slate-100 text-xs"
+                      showText={true}
+                    />
 
                     <Button
                       asChild

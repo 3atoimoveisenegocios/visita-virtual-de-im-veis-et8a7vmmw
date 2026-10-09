@@ -15,6 +15,9 @@ export default function Layout() {
   const [mobileAdminOpen, setMobileAdminOpen] = useState(false)
   const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null)
 
+  const searchParams = new URLSearchParams(location.search)
+  const isEmbed = searchParams.get('embed') === '1'
+
   const isTourPage = location.pathname.startsWith('/visita/')
   const isAdminPage = location.pathname.startsWith('/admin') && location.pathname !== '/admin'
   const isHome = location.pathname === '/'
@@ -50,6 +53,16 @@ export default function Layout() {
   const handleLogout = () => {
     authService.logout()
     navigate('/admin')
+  }
+
+  // The 360° tour screen:
+  // In embed mode (?embed=1), render strictly full screen with no header, nav or footer, no padding/margin
+  if (isTourPage && isEmbed) {
+    return (
+      <div className="w-screen h-screen overflow-hidden bg-black text-[#F7F5F2] m-0 p-0">
+        <Outlet />
+      </div>
+    )
   }
 
   // The 360° tour screen now uses a showcase/vitrine frame layout with the site header and elegant background

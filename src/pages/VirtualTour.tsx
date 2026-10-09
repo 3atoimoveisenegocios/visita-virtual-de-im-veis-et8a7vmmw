@@ -35,6 +35,7 @@ import { cn } from '@/lib/utils'
 export default function VirtualTour() {
   const { id } = useParams<{ id: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
+  const isEmbed = searchParams.get('embed') === '1'
 
   const [property, setProperty] = useState<Property | null>(null)
   const [rooms, setRooms] = useState<Room[]>([])
@@ -404,7 +405,12 @@ export default function VirtualTour() {
       setTimeout(async () => {
         setCurrentRoom(targetRoom)
         setCurrentPoint(targetPoint)
-        setSearchParams({ ambiente: targetRoom.id, ponto: targetPoint.id })
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev)
+          next.set('ambiente', targetRoom.id)
+          next.set('ponto', targetPoint.id)
+          return next
+        })
 
         if (!isSameRoom && property) {
           interactionsService.recordInteraction(property.id, 'room_visited', targetRoom.id)
@@ -494,11 +500,16 @@ export default function VirtualTour() {
         const entryPoint = pts.find((p) => p.is_entry) || pts[0] || null
         setCurrentPoint(entryPoint)
 
-        if (entryPoint) {
-          setSearchParams({ ambiente: nextRoom.id, ponto: entryPoint.id })
-        } else {
-          setSearchParams({ ambiente: nextRoom.id })
-        }
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev)
+          next.set('ambiente', nextRoom.id)
+          if (entryPoint) {
+            next.set('ponto', entryPoint.id)
+          } else {
+            next.delete('ponto')
+          }
+          return next
+        })
 
         try {
           const hs = await hotspotsService.getHotspotsByRoom(nextRoom.id)
@@ -596,7 +607,12 @@ export default function VirtualTour() {
 
   if (loading || !property || !currentRoom) {
     return (
-      <div className="flex-1 w-full flex flex-col items-center justify-center text-white py-24 px-4">
+      <div
+        className={cn(
+          'flex-1 w-full flex flex-col items-center justify-center text-white px-4',
+          isEmbed ? 'h-screen w-screen bg-black' : 'py-24',
+        )}
+      >
         <div className="w-14 h-14 border-4 border-white/20 border-t-[#E07A3F] rounded-full animate-spin mb-4" />
         <h2 className="text-xl font-bold tracking-tight">Preparando Visita Virtual 360°</h2>
         <p className="text-sm text-white/60 mt-1">Carregando mapa esférico e ambientes...</p>
@@ -618,6 +634,470 @@ export default function VirtualTour() {
     pointName: currentPoint?.name,
   })
 
+  // ================= MODO EMBED (?embed=1) =================
+  // Renderiza APENAS o visor 360° em tela cheia (100vw × 100vh), sem cabeçalho,
+  // sem menu, sem rodapé, sem margens ou paddings. Todos os controles internos
+  // continuam presentes e funcionais: setas de deslocamento, seletor de pontos,
+  // botão de planta, botão de som/música, painel de ambiente atual, botões de compartilhamento etc.
+  if (isEmbed) {
+    return (
+      <div className="relative w-screen h-screen overflow-hidden bg-black select-none font-['Inter'] m-0 p-0">
+        {/* Visualizador 360° Three.js ocupando 100% da viewport */}
+        <PanoramaViewer
+          imageUrl={panoramaUrl}
+          roomId={currentRoom.id}
+          roomName={currentRoom.name}
+          pointId={currentPoint?.id}
+          pointName={currentPoint?.name}
+          hotspots={currentHotspots}
+          onHotspotClick={handleHotspotClick}
+          isLoading={isTransitioning}
+          initialYaw={currentPoint?.initial_yaw ?? currentRoom.initial_yaw ?? 0}
+          initialPitch={currentPoint?.initial_pitch ?? currentRoom.initial_pitch ?? 0}
+        />
+
+        {/* Fade-to-black Transition Overlay (300ms) */}
+        <div
+          className={`absolute inset-0 bg-black pointer-events-none transition-opacity duration-300 z-30 flex flex-col items-center justify-center ${
+            isTransitioning ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <div className="w-12 h-12 border-4 border-white/20 border-t-[#E07A3F] rounded-full animate-spin mb-3" />
+          <span className="text-white text-xs font-semibold tracking-wide">{transitionMsg}</span>
+        </div>
+
+        {/* Top-right: Botão de TELA CHEIA nativa do navegador */}
+        <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 flex items-center gap-2">
+          {isFullscreenSupported && (
+            <Button
+              size="sm"
+              onClick={toggleFullscreen}
+              className="bg-black/60 hover:bg-black/85 backdrop-blur-md text-white/90 hover:text-white border border-white/10 rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 h-8 sm:h-9 transition-all text-xs"
+              title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+              aria-label={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5 text-[#E07A3F]" />
+                  <span className="font-semibold hidden sm:inline">Recolher</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5 text-[#E07A3F]" />
+                  <span className="font-semibold hidden sm:inline">Tela cheia</span>
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+
+        {/* Top-left: Título sutil do Imóvel e Ambiente */}
+        <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 flex items-center gap-2 max-w-[70%] sm:max-w-md pointer-events-auto">
+          <div className="bg-black/65 backdrop-blur-md text-white/95 border border-white/15 rounded-2xl px-3.5 py-2 shadow-lg flex flex-col">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#E07A3F] truncate">
+              {property.title}
+            </span>
+            <span className="text-xs font-semibold text-white truncate">
+              {currentRoom.name}
+              {currentPoint && roomPoints.length > 1 && (
+                <span className="text-white/60 font-normal"> • {currentPoint.name}</span>
+              )}
+            </span>
+          </div>
+        </div>
+
+        {/* Bottom Left: Etiqueta do ambiente atual + botão Planta + botão Música + botão Info */}
+        <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 z-20 flex items-center flex-wrap gap-2 max-w-[85%] sm:max-w-xl pointer-events-auto">
+          {/* Discreta etiqueta do ambiente atual */}
+          <div className="bg-black/65 backdrop-blur-md text-white/95 border border-white/15 rounded-full px-3 py-1.5 shadow-lg flex items-center gap-2 text-xs">
+            <span className="w-2 h-2 rounded-full bg-[#E07A3F] shrink-0" />
+            <span className="font-semibold truncate max-w-[130px] sm:max-w-[200px]">
+              {currentRoom.name}
+            </span>
+          </div>
+
+          {/* Botão Detalhes/Info */}
+          <Button
+            size="sm"
+            onClick={handleOpenInfo}
+            className="bg-black/65 hover:bg-black/85 backdrop-blur-md text-white/90 hover:text-white border border-white/15 rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 h-8 sm:h-auto text-xs font-semibold"
+            title="Ver detalhes do ambiente"
+          >
+            <Info className="w-3.5 h-3.5 text-[#E07A3F]" />
+            <span className="hidden sm:inline">Ambiente</span>
+          </Button>
+
+          {/* Botão Planta discreto (visível apenas se o imóvel possui imagem de planta cadastrada) */}
+          {property.floor_plan_image && (
+            <Button
+              size="sm"
+              onClick={handleOpenFloorPlan}
+              className="bg-black/65 hover:bg-black/85 backdrop-blur-md text-white/90 hover:text-white border border-white/15 rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 h-8 sm:h-auto text-xs font-semibold"
+              title="Abrir planta interativa"
+            >
+              <Map className="w-3.5 h-3.5 text-[#E07A3F]" />
+              <span className="hidden sm:inline">Planta</span>
+            </Button>
+          )}
+
+          {/* Botão Som/Música de Fundo (visível apenas se o imóvel possui música cadastrada) */}
+          {property.background_music && (
+            <Button
+              size="sm"
+              onClick={toggleBackgroundMusic}
+              className={cn(
+                'backdrop-blur-md border rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 h-8 sm:h-auto text-xs font-semibold transition-all',
+                isAudioPlaying
+                  ? 'bg-[#E07A3F]/85 hover:bg-[#E07A3F] text-white border-[#E07A3F]'
+                  : 'bg-black/65 hover:bg-black/85 text-white/80 hover:text-white border-white/15',
+              )}
+              title={isAudioPlaying ? 'Desativar música de fundo' : 'Ativar música de fundo'}
+              aria-label={isAudioPlaying ? 'Desativar música de fundo' : 'Ativar música de fundo'}
+            >
+              {isAudioPlaying ? (
+                <>
+                  <Volume2 className="w-3.5 h-3.5 text-white animate-pulse" />
+                  <span className="hidden sm:inline">Música ligada</span>
+                </>
+              ) : (
+                <>
+                  <VolumeX className="w-3.5 h-3.5 text-white/70" />
+                  <span className="hidden sm:inline">Música</span>
+                </>
+              )}
+            </Button>
+          )}
+
+          {/* Botão Copiar Link */}
+          <Button
+            size="sm"
+            onClick={handleShareTour}
+            className="bg-black/65 hover:bg-black/85 backdrop-blur-md text-white/90 hover:text-white border border-white/15 rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 h-8 sm:h-auto text-xs font-semibold"
+            title="Copiar link deste ponto"
+          >
+            {copiedLink ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline text-emerald-300">Copiado!</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-3.5 h-3.5 text-[#E07A3F]" />
+                <span className="hidden sm:inline">Copiar Link</span>
+              </>
+            )}
+          </Button>
+
+          {/* Botão WhatsApp */}
+          <Button
+            size="sm"
+            onClick={handleWhatsAppClick}
+            className="bg-[#25D366]/90 hover:bg-[#25D366] text-white border-0 rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 h-8 sm:h-auto text-xs font-semibold"
+            title="Falar com corretor no WhatsApp"
+          >
+            <MessageCircle className="w-3.5 h-3.5 fill-current" />
+            <span className="hidden sm:inline">WhatsApp</span>
+          </Button>
+        </div>
+
+        {/* Modal da Planta Interativa no Embed */}
+        {property.floor_plan_image && (
+          <Sheet open={floorPlanOpen} onOpenChange={setFloorPlanOpen}>
+            <SheetContent
+              side="right"
+              className="w-full sm:max-w-md bg-[#1C2B36] text-white border-l border-white/10 p-6 flex flex-col justify-between"
+            >
+              <div>
+                <SheetHeader className="mb-5 text-left">
+                  <SheetTitle className="text-white flex items-center gap-2 text-xl font-bold">
+                    <Map className="w-5 h-5 text-[#E07A3F]" />
+                    <span>Planta Interativa</span>
+                  </SheetTitle>
+                  <p className="text-xs text-white/60">
+                    Clique nos ambientes na planta para navegar instantaneamente
+                  </p>
+                </SheetHeader>
+
+                <div className="bg-[#FAF9F6] rounded-2xl p-3 border border-white/10 shadow-inner overflow-hidden mb-4 relative">
+                  <div className="relative">
+                    <img
+                      src={propertiesService.getFileUrl(property, property.floor_plan_image)}
+                      alt="Planta do Imóvel"
+                      className="w-full h-auto rounded-lg object-contain"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="text-xs uppercase tracking-wider text-white/50 font-bold mb-1">
+                    Selecione o cômodo e o ponto
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1">
+                    {rooms.map((r) => {
+                      const isActive = r.id === currentRoom.id
+                      const rPoints = allNavPoints.filter((p) => p.room === r.id)
+
+                      return (
+                        <div key={r.id} className="space-y-1">
+                          <button
+                            onClick={() => {
+                              changeRoom(r.id)
+                              setFloorPlanOpen(false)
+                            }}
+                            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left text-xs transition-colors border ${
+                              isActive
+                                ? 'bg-[#E07A3F] border-[#E07A3F] text-white font-bold'
+                                : 'bg-white/5 border-white/10 text-white/80 hover:bg-white/10 hover:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`w-2 h-2 rounded-full ${
+                                  isActive ? 'bg-white' : 'bg-[#E07A3F]'
+                                }`}
+                              />
+                              <span>{r.name}</span>
+                            </div>
+                            {r.dimensions && (
+                              <span className="text-[10px] opacity-75">{r.dimensions}</span>
+                            )}
+                          </button>
+
+                          {isActive && rPoints.length > 1 && (
+                            <div className="grid grid-cols-1 gap-1 pl-4 pt-1">
+                              {rPoints.map((pt) => {
+                                const isPtActive = pt.id === currentPoint?.id
+                                return (
+                                  <button
+                                    key={pt.id}
+                                    onClick={() => {
+                                      navigateToPoint(pt, r)
+                                      setFloorPlanOpen(false)
+                                    }}
+                                    className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-left text-[11px] transition-colors border ${
+                                      isPtActive
+                                        ? 'bg-white/20 border-white/30 text-white font-bold'
+                                        : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <Footprints className="w-3 h-3 text-[#E07A3F]" />
+                                      <span>{pt.name}</span>
+                                    </div>
+                                    {isPtActive && (
+                                      <Badge className="bg-[#E07A3F] text-[9px] h-4 px-1.5">
+                                        Atual
+                                      </Badge>
+                                    )}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-5 border-t border-white/10">
+                <Button
+                  onClick={handleWhatsAppClick}
+                  className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold py-5 rounded-xl shadow-md text-xs"
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Tirar dúvidas sobre a planta no WhatsApp
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
+        )}
+
+        {/* Modal de Informações do Ambiente no Embed */}
+        <Sheet open={infoOpen} onOpenChange={setInfoOpen}>
+          <SheetContent
+            side="left"
+            className="w-full sm:max-w-md bg-[#1C2B36] text-white border-r border-white/10 p-6 flex flex-col justify-between"
+          >
+            <div>
+              <SheetHeader className="mb-6 text-left">
+                <SheetTitle className="text-white flex items-center gap-2 text-xl font-bold">
+                  <Info className="w-5 h-5 text-[#E07A3F]" />
+                  <span>Detalhes do Ambiente</span>
+                </SheetTitle>
+                <p className="text-xs text-white/60">
+                  Informações técnicas e dimensões do cômodo atual
+                </p>
+              </SheetHeader>
+
+              <div className="space-y-5">
+                <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                  <div className="text-[10px] uppercase tracking-wider text-[#E07A3F] font-bold mb-1">
+                    Ambiente Atual
+                  </div>
+                  <h3 className="text-2xl font-bold text-white mb-1">{currentRoom.name}</h3>
+                  {currentPoint && (
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-400 mb-2 font-medium">
+                      <Footprints className="w-3.5 h-3.5" />
+                      <span>Ponto de observação: {currentPoint.name}</span>
+                    </div>
+                  )}
+                  {currentRoom.dimensions && (
+                    <div className="flex items-center gap-1.5 text-xs text-white/70">
+                      <Maximize2 className="w-3.5 h-3.5 text-[#E07A3F]" />
+                      <span>
+                        Dimensões: <strong>{currentRoom.dimensions}</strong>
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Seletor de Pontos do Cômodo Atual no Sheet */}
+                {roomPoints.length > 1 && (
+                  <div className="space-y-2">
+                    <div className="text-xs uppercase tracking-wider text-white/50 font-bold">
+                      Pontos de Visão Deste Cômodo ({roomPoints.length})
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                      {roomPoints.map((pt) => {
+                        const isPtActive = pt.id === currentPoint?.id
+                        return (
+                          <button
+                            key={pt.id}
+                            type="button"
+                            onClick={() => {
+                              navigateToPoint(pt, currentRoom)
+                              setInfoOpen(false)
+                            }}
+                            className={cn(
+                              'w-full flex items-center justify-between p-2.5 rounded-xl border text-left text-xs transition-colors',
+                              isPtActive
+                                ? 'bg-[#E07A3F]/20 border-[#E07A3F] text-white font-bold'
+                                : 'bg-white/5 border-white/10 text-white/80 hover:bg-white/10 hover:text-white',
+                            )}
+                          >
+                            <span className="flex items-center gap-2">
+                              <Footprints className="w-3.5 h-3.5 text-[#E07A3F]" />
+                              {pt.name}
+                            </span>
+                            {isPtActive && (
+                              <Badge className="bg-[#E07A3F] text-[9px] h-4 px-1.5">Atual</Badge>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Seleção de Outros Cômodos no Sheet */}
+                {rooms.length > 1 && (
+                  <div className="space-y-2">
+                    <div className="text-xs uppercase tracking-wider text-white/50 font-bold">
+                      Navegar para Outro Cômodo
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {rooms.map((r) => {
+                        const isCurrent = r.id === currentRoom.id
+                        return (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => {
+                              changeRoom(r.id)
+                              setInfoOpen(false)
+                            }}
+                            className={cn(
+                              'p-2 rounded-xl border text-left text-xs transition-colors',
+                              isCurrent
+                                ? 'bg-[#E07A3F] text-white font-bold border-[#E07A3F]'
+                                : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10 hover:text-white',
+                            )}
+                          >
+                            <span className="truncate block">{r.name}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {currentRoom.description && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs uppercase tracking-wider text-white/50 font-bold">
+                        Descrição do Espaço
+                      </h4>
+                    </div>
+                    <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                      <p
+                        ref={descRef}
+                        className={cn(
+                          'text-xs text-white/80 leading-relaxed break-words',
+                          !isDescExpanded && 'line-clamp-4',
+                        )}
+                      >
+                        {currentRoom.description}
+                      </p>
+                      {(isDescClamped || isDescExpanded) && (
+                        <button
+                          type="button"
+                          onClick={() => setIsDescExpanded((prev) => !prev)}
+                          className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-[#E07A3F] hover:text-[#f2955d] transition-colors focus:outline-none"
+                        >
+                          <span>{isDescExpanded ? 'Ver menos' : 'Ver mais'}</span>
+                          {isDescExpanded ? (
+                            <ChevronUp className="w-3 h-3" />
+                          ) : (
+                            <ChevronDown className="w-3 h-3" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <h4 className="text-xs uppercase tracking-wider text-white/50 font-bold">
+                    Sobre o Imóvel
+                  </h4>
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-xs text-white/70 space-y-1.5">
+                    <div className="text-white font-semibold">{property.title}</div>
+                    <div>
+                      Localização: {property.neighborhood}, {property.city}
+                    </div>
+                    <div className="text-[#E07A3F] font-bold text-sm pt-1">
+                      {formatPrice(property.price)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-white/10 space-y-2.5">
+              <Button
+                onClick={handleWhatsAppClick}
+                className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold py-5 rounded-xl shadow-md text-xs"
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Falar com o corretor sobre este ambiente
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setInfoOpen(false)}
+                className="w-full border-white/20 text-white hover:bg-white/10 py-5 rounded-xl text-xs"
+              >
+                Continuar navegando em 360°
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
+    )
+  }
+
+  // ================= MODO PADRÃO (Página do site com cabeçalho, vitrine e rodapé) =================
   return (
     <div className="w-full max-w-[1360px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 flex flex-col gap-4 font-['Inter']">
       {/* ===================== CABEÇALHO DO IMÓVEL (acima da moldura) ===================== */}
