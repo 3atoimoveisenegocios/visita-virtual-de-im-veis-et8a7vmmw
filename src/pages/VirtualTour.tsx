@@ -30,12 +30,12 @@ import {
   ChevronUp,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
+import { cn, isEmbedMode } from '@/lib/utils'
 
 export default function VirtualTour() {
   const { id } = useParams<{ id: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
-  const isEmbed = searchParams.get('embed') === '1'
+  const isEmbed = isEmbedMode(searchParams)
 
   const [property, setProperty] = useState<Property | null>(null)
   const [rooms, setRooms] = useState<Room[]>([])

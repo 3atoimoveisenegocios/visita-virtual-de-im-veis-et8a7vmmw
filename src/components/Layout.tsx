@@ -7,7 +7,7 @@ import { Compass, Building2, PlusCircle, LogOut, Menu, User, Palette } from 'luc
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { NavigationHeader } from '@/components/NavigationHeader'
-import { cn } from '@/lib/utils'
+import { cn, isEmbedMode } from '@/lib/utils'
 
 export default function Layout() {
   const location = useLocation()
@@ -15,8 +15,7 @@ export default function Layout() {
   const [mobileAdminOpen, setMobileAdminOpen] = useState(false)
   const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null)
 
-  const searchParams = new URLSearchParams(location.search)
-  const isEmbed = searchParams.get('embed') === '1'
+  const isEmbed = isEmbedMode(location.search)
 
   const isTourPage = location.pathname.startsWith('/visita/')
   const isAdminPage = location.pathname.startsWith('/admin') && location.pathname !== '/admin'
@@ -56,7 +55,7 @@ export default function Layout() {
   }
 
   // The 360° tour screen:
-  // In embed mode (?embed=1), render strictly full screen with no header, nav or footer, no padding/margin
+  // In embed mode (?embed=1 or inside an iframe), render strictly full screen with no header, nav or footer, no padding/margin
   if (isTourPage && isEmbed) {
     return (
       <div className="w-screen h-screen overflow-hidden bg-black text-[#F7F5F2] m-0 p-0">
