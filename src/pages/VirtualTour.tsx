@@ -31,19 +31,37 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, isEmbedMode } from '@/lib/utils'
+import { withRetry, getLocalCache, setLocalCache } from '@/lib/cache-retry'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
+
+interface CachedTourData {
+  property: Property
+  rooms: Room[]
+  allNavPoints: NavPoint[]
+  initialRoomId: string
+  hotspotsByRoom: Record<string, Hotspot[]>
+}
 
 export default function VirtualTour() {
   const { id } = useParams<{ id: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const isEmbed = isEmbedMode(searchParams)
 
-  const [property, setProperty] = useState<Property | null>(null)
-  const [rooms, setRooms] = useState<Room[]>([])
-  const [currentRoom, setCurrentRoom] = useState<Room | null>(null)
-  const [allNavPoints, setAllNavPoints] = useState<NavPoint[]>([])
+  const cachedTour = id ? getLocalCache<CachedTourData>(`tour_${id}`) : null
+
+  const [property, setProperty] = useState<Property | null>(() => cachedTour?.property || null)
+  const [rooms, setRooms] = useState<Room[]>(() => cachedTour?.rooms || [])
+  const [currentRoom, setCurrentRoom] = useState<Room | null>(() => {
+    if (!cachedTour || !cachedTour.rooms?.length) return null
+    const reqRoom = searchParams.get('ambiente')
+    return cachedTour.rooms.find((r) => r.id === reqRoom) || cachedTour.rooms[0]
+  })
+  const [allNavPoints, setAllNavPoints] = useState<NavPoint[]>(() => cachedTour?.allNavPoints || [])
   const [currentPoint, setCurrentPoint] = useState<NavPoint | null>(null)
   const [roomPoints, setRoomPoints] = useState<NavPoint[]>([])
   const [currentHotspots, setCurrentHotspots] = useState<Hotspot[]>([])
+  const [tourError, setTourError] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
   const [isDescExpanded, setIsDescExpanded] = useState(false)
   const [isDescClamped, setIsDescClamped] = useState(false)
   const descRef = useRef<HTMLParagraphElement>(null)
@@ -263,66 +281,152 @@ export default function VirtualTour() {
     setIsFullscreen(true)
   }, [isFullscreen])
 
-  // Initial load
-  useEffect(() => {
-    async function initTour() {
-      if (!id) return
-      try {
-        setLoading(true)
-        const prop = await propertiesService.getPropertyById(id)
-        setProperty(prop)
+  // Initial load com retry automático (2-3 tentativas) e persistência em cache
+  const initTour = useCallback(async () => {
+    if (!id) return
+    const cacheKey = `tour_${id}`
+    const existingCache = getLocalCache<CachedTourData>(cacheKey)
 
-        // Record tour entry
-        interactionsService.recordInteraction(id, 'tour_started')
-
-        const rms = await roomsService.getRoomsByProperty(id)
-        setRooms(rms)
-
-        if (rms.length > 0) {
-          // Fetch all nav points for all rooms
-          const roomIds = rms.map((r) => r.id)
-          const points = await navPointsService.getNavPointsByRooms(roomIds)
-          setAllNavPoints(points)
-
-          // Check query param ?ambiente= & ?ponto=
-          const requestedRoomId = searchParams.get('ambiente')
-          const requestedPointId = searchParams.get('ponto')
-
-          const initialRoom = rms.find((r) => r.id === requestedRoomId) || rms[0]
-          setCurrentRoom(initialRoom)
-
-          // Room points
-          const currentRoomPoints = points.filter((p) => p.room === initialRoom.id)
-          setRoomPoints(currentRoomPoints)
-
-          // Find current point: requested or entry point or first point
-          const initialPoint =
-            currentRoomPoints.find((p) => p.id === requestedPointId) ||
-            currentRoomPoints.find((p) => p.is_entry) ||
-            currentRoomPoints[0] ||
-            null
-          setCurrentPoint(initialPoint)
-
-          // Record room visited
-          interactionsService.recordInteraction(id, 'room_visited', initialRoom.id)
-
-          // Fetch hotspots
-          const hs = await hotspotsService.getHotspotsByRoom(initialRoom.id)
-          if (initialPoint) {
-            const pointHs = hs.filter((h) => !h.nav_point || h.nav_point === initialPoint.id)
-            setCurrentHotspots(pointHs)
-          } else {
-            setCurrentHotspots(hs)
-          }
-        }
-      } catch (err) {
-        console.error('Erro ao iniciar tour virtual:', err)
-      } finally {
-        setLoading(false)
-      }
+    // Se já temos cache, não deixamos tela em branco enquanto revalida
+    if (!existingCache || !existingCache.property) {
+      setLoading(true)
     }
+    setTourError(false)
+
+    try {
+      // 1. Busca dados do imóvel com retry
+      const prop = await withRetry(() => propertiesService.getPropertyById(id), {
+        retries: 3,
+        delayMs: 600,
+      })
+      setProperty(prop)
+
+      // Registra entrada do tour
+      interactionsService.recordInteraction(id, 'tour_started')
+
+      // 2. Busca cômodos com retry
+      const rms = await withRetry(() => roomsService.getRoomsByProperty(id), {
+        retries: 3,
+        delayMs: 600,
+      })
+      setRooms(rms)
+
+      let points: NavPoint[] = []
+      let initialRoom: Room | null = null
+      let initialPoint: NavPoint | null = null
+      let initialHs: Hotspot[] = []
+
+      if (rms.length > 0) {
+        const roomIds = rms.map((r) => r.id)
+        points = await withRetry(() => navPointsService.getNavPointsByRooms(roomIds), {
+          retries: 2,
+          delayMs: 500,
+        }).catch((e) => {
+          console.warn('Erro ao carregar nav points, usando vazio:', e)
+          return []
+        })
+        setAllNavPoints(points)
+
+        // Check query param ?ambiente= & ?ponto=
+        const requestedRoomId = searchParams.get('ambiente')
+        const requestedPointId = searchParams.get('ponto')
+
+        initialRoom = rms.find((r) => r.id === requestedRoomId) || rms[0]
+        setCurrentRoom(initialRoom)
+
+        // Room points
+        const currentRoomPoints = points.filter((p) => p.room === initialRoom.id)
+        setRoomPoints(currentRoomPoints)
+
+        // Find current point
+        initialPoint =
+          currentRoomPoints.find((p) => p.id === requestedPointId) ||
+          currentRoomPoints.find((p) => p.is_entry) ||
+          currentRoomPoints[0] ||
+          null
+        setCurrentPoint(initialPoint)
+
+        interactionsService.recordInteraction(id, 'room_visited', initialRoom.id)
+
+        // Hotspots
+        initialHs = await withRetry(() => hotspotsService.getHotspotsByRoom(initialRoom!.id), {
+          retries: 2,
+          delayMs: 500,
+        }).catch(() => [])
+
+        if (initialPoint) {
+          const pointHs = initialHs.filter((h) => !h.nav_point || h.nav_point === initialPoint!.id)
+          setCurrentHotspots(pointHs)
+        } else {
+          setCurrentHotspots(initialHs)
+        }
+      }
+
+      // Salva snapshot completo no cache local como última versão boa
+      if (prop && rms.length > 0) {
+        setLocalCache<CachedTourData>(cacheKey, {
+          property: prop,
+          rooms: rms,
+          allNavPoints: points,
+          initialRoomId: initialRoom?.id || rms[0]?.id || '',
+          hotspotsByRoom: initialRoom ? { [initialRoom.id]: initialHs } : {},
+        })
+      }
+      setTourError(false)
+    } catch (err) {
+      console.error('Erro ao iniciar tour virtual após retries:', err)
+
+      // Fallback para cache local se existir
+      if (existingCache && existingCache.property && existingCache.rooms?.length > 0) {
+        setProperty(existingCache.property)
+        setRooms(existingCache.rooms)
+        setAllNavPoints(existingCache.allNavPoints || [])
+
+        const requestedRoomId = searchParams.get('ambiente')
+        const fallbackRoom =
+          existingCache.rooms.find((r) => r.id === requestedRoomId) ||
+          existingCache.rooms.find((r) => r.id === existingCache.initialRoomId) ||
+          existingCache.rooms[0]
+
+        setCurrentRoom(fallbackRoom)
+        const pts = (existingCache.allNavPoints || []).filter((p) => p.room === fallbackRoom.id)
+        setRoomPoints(pts)
+
+        const requestedPointId = searchParams.get('ponto')
+        const fallbackPoint =
+          pts.find((p) => p.id === requestedPointId) ||
+          pts.find((p) => p.is_entry) ||
+          pts[0] ||
+          null
+        setCurrentPoint(fallbackPoint)
+
+        const cachedHs = existingCache.hotspotsByRoom?.[fallbackRoom.id] || []
+        if (fallbackPoint) {
+          setCurrentHotspots(
+            cachedHs.filter((h) => !h.nav_point || h.nav_point === fallbackPoint.id),
+          )
+        } else {
+          setCurrentHotspots(cachedHs)
+        }
+        setTourError(false)
+      } else {
+        // Sem cache disponível -> ativa tela de erro com Tentar novamente
+        setTourError(true)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [id, searchParams])
+
+  useEffect(() => {
     initTour()
-  }, [id])
+  }, [initTour])
+
+  const handleManualRetry = async () => {
+    setIsRetrying(true)
+    await initTour()
+    setIsRetrying(false)
+  }
 
   // Manage persistent background music instance across room transitions
   useEffect(() => {
@@ -605,6 +709,50 @@ export default function VirtualTour() {
     window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener,noreferrer')
   }
 
+  // Estado de erro quando falham os retries e não temos versão em cache
+  if (!loading && (tourError || !property || !currentRoom)) {
+    return (
+      <div
+        className={cn(
+          'flex-1 w-full flex flex-col items-center justify-center text-white px-4',
+          isEmbed ? 'h-screen w-screen bg-black' : 'py-24 min-h-[60vh]',
+        )}
+      >
+        <div className="bg-[#1C2B36] border border-amber-500/30 rounded-2xl p-8 sm:p-10 max-w-md w-full text-center shadow-xl">
+          <div className="w-14 h-14 bg-amber-500/10 border border-amber-500/30 rounded-full flex items-center justify-center mx-auto mb-4 text-[#E07A3F]">
+            <AlertTriangle className="w-7 h-7" />
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-white mb-2">
+            Não foi possível carregar
+          </h2>
+          <p className="text-sm text-white/70 mb-6 leading-relaxed">
+            Houve uma instabilidade na conexão ao carregar os dados desta visita virtual 360°.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Button
+              onClick={handleManualRetry}
+              disabled={isRetrying}
+              className="w-full sm:w-auto bg-[#E07A3F] hover:bg-[#d06d33] text-white px-6 py-2.5 rounded-xl font-semibold shadow-sm inline-flex items-center justify-center gap-2"
+            >
+              <RefreshCw className={cn('w-4 h-4', isRetrying && 'animate-spin')} />
+              <span>{isRetrying ? 'Tentando novamente...' : 'Tentar novamente'}</span>
+            </Button>
+            {!isEmbed && (
+              <Button
+                asChild
+                variant="outline"
+                className="w-full sm:w-auto bg-transparent border-white/20 text-white hover:bg-white/10 rounded-xl"
+              >
+                <Link to="/">Voltar ao Início</Link>
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Estado de loading enquanto carrega
   if (loading || !property || !currentRoom) {
     return (
       <div

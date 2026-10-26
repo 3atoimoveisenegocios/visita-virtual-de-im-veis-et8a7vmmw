@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom'
 import { authService } from '@/services/auth'
 import { settingsService } from '@/services/settings'
+import { withRetry, getLocalCache, setLocalCache } from '@/lib/cache-retry'
 import type { SiteSettings, LogoSize } from '@/types'
 import { Compass, Building2, PlusCircle, LogOut, Menu, User, Palette } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -13,7 +14,10 @@ export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const [mobileAdminOpen, setMobileAdminOpen] = useState(false)
-  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null)
+  // Inicializa já com o cache local para render imediato sem piscar
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(() => {
+    return getLocalCache<SiteSettings>('site_settings')
+  })
 
   const isEmbed = isEmbedMode(location.search)
 
@@ -24,12 +28,22 @@ export default function Layout() {
   useEffect(() => {
     async function loadSettings() {
       try {
-        const data = await settingsService.getSettings()
+        // Tenta com retry automático (3 tentativas com backoff)
+        const data = await withRetry(() => settingsService.getSettings(), {
+          retries: 3,
+          delayMs: 600,
+        })
         if (data) {
           setSiteSettings(data)
+          setLocalCache('site_settings', data)
         }
       } catch (err) {
-        console.error('Erro ao carregar configurações do site:', err)
+        console.warn('Layout: Erro ao carregar configurações após retries, mantendo cache:', err)
+        // Se falhou, mantém o cache existente se houver
+        const cached = getLocalCache<SiteSettings>('site_settings')
+        if (cached) {
+          setSiteSettings((current) => current || cached)
+        }
       }
     }
 
@@ -38,6 +52,7 @@ export default function Layout() {
     const handleSettingsUpdated = (e: any) => {
       if (e?.detail) {
         setSiteSettings(e.detail)
+        setLocalCache('site_settings', e.detail)
       } else {
         loadSettings()
       }

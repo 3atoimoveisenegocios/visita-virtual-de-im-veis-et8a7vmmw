@@ -6,18 +6,13 @@ export const settingsService = {
    * Fetches the singleton settings record. If none exists, creates one or returns null.
    */
   async getSettings(): Promise<SiteSettings | null> {
-    try {
-      const records = await pb.collection('settings').getList<SiteSettings>(1, 1, {
-        sort: '-created',
-      })
-      if (records.items.length > 0) {
-        return records.items[0]
-      }
-      return null
-    } catch (err) {
-      console.error('Erro ao buscar configurações:', err)
-      return null
+    const records = await pb.collection('settings').getList<SiteSettings>(1, 1, {
+      sort: '-created',
+    })
+    if (records.items.length > 0) {
+      return records.items[0]
     }
+    return null
   },
 
   /**

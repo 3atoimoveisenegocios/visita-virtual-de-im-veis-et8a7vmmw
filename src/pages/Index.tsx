@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { propertiesService } from '@/services/properties'
 import { roomsService } from '@/services/rooms'
 import { settingsService } from '@/services/settings'
+import { withRetry, getLocalCache, setLocalCache } from '@/lib/cache-retry'
 import type { Property, Room, SiteSettings } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import {
   Compass,
   Bed,
@@ -17,42 +19,123 @@ import {
   ArrowRight,
   Eye,
   MapPin,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react'
 
 export default function Index() {
-  const [properties, setProperties] = useState<Property[]>([])
-  const [firstRooms, setFirstRooms] = useState<Record<string, Room>>({})
-  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Inicialização com cache local para evitar piscar tela em branco
+  const [properties, setProperties] = useState<Property[]>(() => {
+    return getLocalCache<Property[]>('home_properties') || []
+  })
+  const [firstRooms, setFirstRooms] = useState<Record<string, Room>>(() => {
+    return getLocalCache<Record<string, Room>>('home_first_rooms') || {}
+  })
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(() => {
+    return getLocalCache<SiteSettings>('site_settings')
+  })
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        setLoading(true)
-        const [props, settings] = await Promise.all([
-          propertiesService.getPublishedProperties(),
-          settingsService.getSettings(),
-        ])
+  // Se já há imóveis no cache, não bloqueia a página inteira com skeleton
+  const [loading, setLoading] = useState(() => {
+    const cachedProps = getLocalCache<Property[]>('home_properties')
+    return !cachedProps || cachedProps.length === 0
+  })
+
+  // Estado de erro honesto: só é true se a busca falhou E não temos dados no cache
+  const [hasPropertiesError, setHasPropertiesError] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
+
+  const loadData = useCallback(async () => {
+    // Busca independente de imóveis e de configurações:
+    // a falha de uma não descarta a outra!
+    const cachedProps = getLocalCache<Property[]>('home_properties')
+    if (!cachedProps || cachedProps.length === 0) {
+      setLoading(true)
+    }
+    setHasPropertiesError(false)
+
+    // 1. Busca configurações com retry independente
+    const settingsPromise = withRetry(() => settingsService.getSettings(), {
+      retries: 3,
+      delayMs: 600,
+    })
+      .then((settings) => {
+        if (settings) {
+          setSiteSettings(settings)
+          setLocalCache('site_settings', settings)
+        }
+      })
+      .catch((err) => {
+        console.warn(
+          'Home: Falha ao carregar configurações após retries, usando cache se houver:',
+          err,
+        )
+        const cached = getLocalCache<SiteSettings>('site_settings')
+        if (cached) {
+          setSiteSettings((curr) => curr || cached)
+        }
+      })
+
+    // 2. Busca imóveis com retry independente
+    const propertiesPromise = withRetry(() => propertiesService.getPublishedProperties(), {
+      retries: 3,
+      delayMs: 600,
+    })
+      .then(async (props) => {
         setProperties(props)
-        setSiteSettings(settings)
+        setLocalCache('home_properties', props)
+        setHasPropertiesError(false)
 
-        // Fetch first room for each property for cover thumbnail
-        const roomsMap: Record<string, Room> = {}
+        // Busca o 1º cômodo de cada imóvel para thumbnail de capa
+        const roomsMap: Record<string, Room> = {
+          ...(getLocalCache<Record<string, Room>>('home_first_rooms') || {}),
+        }
         for (const p of props) {
-          const rooms = await roomsService.getRoomsByProperty(p.id)
-          if (rooms.length > 0) {
-            roomsMap[p.id] = rooms[0]
+          try {
+            const rooms = await withRetry(() => roomsService.getRoomsByProperty(p.id), {
+              retries: 2,
+              delayMs: 400,
+            })
+            if (rooms.length > 0) {
+              roomsMap[p.id] = rooms[0]
+            }
+          } catch (rErr) {
+            console.warn(`Home: Não foi possível obter ambiente do imóvel ${p.id}:`, rErr)
           }
         }
         setFirstRooms(roomsMap)
-      } catch (err) {
-        console.error('Erro ao carregar imóveis e configurações:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadData()
+        setLocalCache('home_first_rooms', roomsMap)
+      })
+      .catch((err) => {
+        console.error('Home: Falha ao carregar imóveis após retries:', err)
+        const cached = getLocalCache<Property[]>('home_properties')
+        if (cached && cached.length > 0) {
+          // Mantém o cache e NÃO mostra tela de erro feia
+          setProperties(cached)
+          const cachedRooms = getLocalCache<Record<string, Room>>('home_first_rooms')
+          if (cachedRooms) {
+            setFirstRooms(cachedRooms)
+          }
+          setHasPropertiesError(false)
+        } else {
+          // Sem cache e retries esgotados -> erro honesto
+          setHasPropertiesError(true)
+        }
+      })
+
+    await Promise.allSettled([settingsPromise, propertiesPromise])
+    setLoading(false)
   }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const handleManualRetry = async () => {
+    setIsRetrying(true)
+    await loadData()
+    setIsRetrying(false)
+  }
 
   const formatPrice = (val: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -174,8 +257,29 @@ export default function Index() {
           </div>
         )}
 
-        {/* Empty State */}
-        {!loading && properties.length === 0 && (
+        {/* Error State: apenas se os retries falharem E não houver cache */}
+        {!loading && hasPropertiesError && properties.length === 0 && (
+          <div className="bg-white rounded-2xl p-10 sm:p-12 text-center border border-amber-200 bg-amber-50/40 shadow-sm max-w-xl mx-auto my-8">
+            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-700">
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold text-[#1C2B36] mb-2">Não foi possível carregar</h3>
+            <p className="text-[#5B6B76] text-sm mb-6 leading-relaxed max-w-md mx-auto">
+              Houve uma instabilidade momentânea na conexão ao buscar os imóveis.
+            </p>
+            <Button
+              onClick={handleManualRetry}
+              disabled={isRetrying}
+              className="bg-[#E07A3F] hover:bg-[#d06d33] text-white px-6 py-2.5 rounded-xl font-semibold shadow-sm inline-flex items-center gap-2"
+            >
+              <RefreshCw className={cn('w-4 h-4', isRetrying && 'animate-spin')} />
+              <span>{isRetrying ? 'Tentando novamente...' : 'Tentar novamente'}</span>
+            </Button>
+          </div>
+        )}
+
+        {/* Empty State: apenas quando a busca deu SUCESSO mas a lista está vazia */}
+        {!loading && !hasPropertiesError && properties.length === 0 && (
           <div className="bg-white rounded-2xl p-12 text-center border border-[#E2E6E9] shadow-sm max-w-xl mx-auto my-8">
             <div className="w-16 h-16 bg-[#1F4E5F]/10 rounded-full flex items-center justify-center mx-auto mb-4 text-[#1F4E5F]">
               <Compass className="w-8 h-8" />
