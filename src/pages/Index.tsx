@@ -13,6 +13,7 @@ import {
   Compass,
   Bed,
   Bath,
+  DoorOpen,
   Car,
   Maximize2,
   ChevronDown,
@@ -305,7 +306,11 @@ export default function Index() {
                   : 'https://pannellum.org/images/alma.jpg'
 
               const hasAmenities = Boolean(
-                prop.bedrooms || prop.bathrooms || prop.parking_spots || prop.area_m2,
+                prop.bedrooms ||
+                prop.bathrooms ||
+                prop.suites ||
+                prop.parking_spots ||
+                prop.area_m2,
               )
 
               return (
@@ -357,7 +362,7 @@ export default function Index() {
 
                       {/* Property Amenities Grid */}
                       {hasAmenities ? (
-                        <div className="grid grid-cols-4 gap-2 py-3.5 px-2 bg-[#F8FAFC] rounded-xl border border-[#E2E6E9] mb-4 text-center text-xs text-[#5B6B76]">
+                        <div className="grid grid-cols-5 gap-2 py-3.5 px-2 bg-[#F8FAFC] rounded-xl border border-[#E2E6E9] mb-4 text-center text-xs text-[#5B6B76]">
                           {prop.bedrooms ? (
                             <div className="flex flex-col items-center justify-center">
                               <Bed className="w-4 h-4 mb-1 text-[#1F4E5F]" />
@@ -371,6 +376,22 @@ export default function Index() {
                               <Bed className="w-4 h-4 mb-1 text-[#94A3B8]" />
                               <span className="font-bold text-xs leading-none">-</span>
                               <span className="text-[10px] mt-0.5">Quartos</span>
+                            </div>
+                          )}
+
+                          {prop.suites ? (
+                            <div className="flex flex-col items-center justify-center">
+                              <DoorOpen className="w-4 h-4 mb-1 text-[#1F4E5F]" />
+                              <span className="font-bold text-[#1C2B36] text-xs leading-none">
+                                {prop.suites}
+                              </span>
+                              <span className="text-[10px] mt-0.5 text-[#64748B]">Suítes</span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center opacity-40">
+                              <DoorOpen className="w-4 h-4 mb-1 text-[#94A3B8]" />
+                              <span className="font-bold text-xs leading-none">-</span>
+                              <span className="text-[10px] mt-0.5">Suítes</span>
                             </div>
                           )}
 

@@ -7,6 +7,7 @@ export interface Property {
   area_m2?: number
   bedrooms?: number
   bathrooms?: number
+  suites?: number
   parking_spots?: number
   description?: string
   whatsapp_number?: string

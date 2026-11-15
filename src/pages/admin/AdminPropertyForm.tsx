@@ -40,6 +40,7 @@ export default function AdminPropertyForm() {
   const [areaM2, setAreaM2] = useState<number | ''>('')
   const [bedrooms, setBedrooms] = useState<number | ''>('')
   const [bathrooms, setBathrooms] = useState<number | ''>('')
+  const [suites, setSuites] = useState<number | ''>('')
   const [parkingSpots, setParkingSpots] = useState<number | ''>('')
   const [description, setDescription] = useState('')
   const [whatsappNumber, setWhatsappNumber] = useState('5511999998888')
@@ -85,6 +86,7 @@ export default function AdminPropertyForm() {
       setAreaM2(prop.area_m2 ?? '')
       setBedrooms(prop.bedrooms ?? '')
       setBathrooms(prop.bathrooms ?? '')
+      setSuites(prop.suites ?? '')
       setParkingSpots(prop.parking_spots ?? '')
       setDescription(prop.description || '')
       setWhatsappNumber(prop.whatsapp_number || '')
@@ -134,6 +136,7 @@ export default function AdminPropertyForm() {
       if (areaM2) formData.append('area_m2', String(areaM2))
       if (bedrooms) formData.append('bedrooms', String(bedrooms))
       if (bathrooms) formData.append('bathrooms', String(bathrooms))
+      if (suites) formData.append('suites', String(suites))
       if (parkingSpots) formData.append('parking_spots', String(parkingSpots))
       formData.append('description', description.trim())
       formData.append('whatsapp_number', whatsappNumber.trim())
@@ -401,8 +404,8 @@ export default function AdminPropertyForm() {
               </div>
             </div>
 
-            {/* Area, Bedrooms, Bathrooms, Parking */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {/* Area, Bedrooms, Bathrooms, Suites, Parking */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="area" className="text-xs font-semibold text-[#1C2B36]">
                   Área Útil (m²)
@@ -441,6 +444,21 @@ export default function AdminPropertyForm() {
                   value={bathrooms}
                   onChange={(e) => setBathrooms(e.target.value ? Number(e.target.value) : '')}
                   placeholder="Ex: 2"
+                  className="text-sm rounded-xl border-[#E2E6E9]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="suites" className="text-xs font-semibold text-[#1C2B36]">
+                  Suítes
+                </Label>
+                <Input
+                  id="suites"
+                  type="number"
+                  min={0}
+                  value={suites}
+                  onChange={(e) => setSuites(e.target.value ? Number(e.target.value) : '')}
+                  placeholder="Ex: 1"
                   className="text-sm rounded-xl border-[#E2E6E9]"
                 />
               </div>

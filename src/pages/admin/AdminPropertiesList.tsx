@@ -210,6 +210,7 @@ export default function AdminPropertiesList() {
 
                     <div className="flex items-center gap-3 text-[11px] text-[#5B6B76]">
                       {prop.bedrooms ? <span>{prop.bedrooms} quartos</span> : null}
+                      {prop.suites ? <span>{prop.suites} suítes</span> : null}
                       {prop.area_m2 ? <span>{prop.area_m2} m²</span> : null}
                     </div>
                   </div>

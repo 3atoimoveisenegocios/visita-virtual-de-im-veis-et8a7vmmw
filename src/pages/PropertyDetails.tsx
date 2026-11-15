@@ -12,6 +12,7 @@ import {
   Compass,
   Bed,
   Bath,
+  DoorOpen,
   Car,
   Maximize2,
   MapPin,
@@ -282,7 +283,7 @@ export default function PropertyDetails() {
           <Card className="border-[#E2E6E9] shadow-sm bg-white">
             <CardContent className="p-6">
               <h3 className="font-bold text-base text-[#1C2B36] mb-4">Características do Imóvel</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                 {property.area_m2 ? (
                   <div className="p-4 rounded-xl bg-[#F7F5F2] border border-[#E2E6E9] flex flex-col items-center text-center">
                     <Maximize2 className="w-6 h-6 text-[#1F4E5F] mb-1.5" />
@@ -304,6 +305,14 @@ export default function PropertyDetails() {
                     <Bath className="w-6 h-6 text-[#1F4E5F] mb-1.5" />
                     <span className="text-lg font-bold text-[#1C2B36]">{property.bathrooms}</span>
                     <span className="text-xs text-[#5B6B76]">Banheiros</span>
+                  </div>
+                ) : null}
+
+                {property.suites ? (
+                  <div className="p-4 rounded-xl bg-[#F7F5F2] border border-[#E2E6E9] flex flex-col items-center text-center">
+                    <DoorOpen className="w-6 h-6 text-[#1F4E5F] mb-1.5" />
+                    <span className="text-lg font-bold text-[#1C2B36]">{property.suites}</span>
+                    <span className="text-xs text-[#5B6B76]">Suítes</span>
                   </div>
                 ) : null}
 
