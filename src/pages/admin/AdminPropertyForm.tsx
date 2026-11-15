@@ -37,6 +37,7 @@ export default function AdminPropertyForm() {
   const [neighborhood, setNeighborhood] = useState('')
   const [city, setCity] = useState('São Paulo')
   const [price, setPrice] = useState<number | ''>('')
+  const [rentalPrice, setRentalPrice] = useState<number | ''>('')
   const [areaM2, setAreaM2] = useState<number | ''>('')
   const [bedrooms, setBedrooms] = useState<number | ''>('')
   const [bathrooms, setBathrooms] = useState<number | ''>('')
@@ -83,6 +84,7 @@ export default function AdminPropertyForm() {
       setNeighborhood(prop.neighborhood || '')
       setCity(prop.city || 'São Paulo')
       setPrice(prop.price ?? '')
+      setRentalPrice(prop.rental_price ?? '')
       setAreaM2(prop.area_m2 ?? '')
       setBedrooms(prop.bedrooms ?? '')
       setBathrooms(prop.bathrooms ?? '')
@@ -133,6 +135,8 @@ export default function AdminPropertyForm() {
       formData.append('neighborhood', neighborhood.trim())
       formData.append('city', city.trim())
       formData.append('price', String(price))
+      if (rentalPrice) formData.append('rental_price', String(rentalPrice))
+      else formData.append('rental_price', '')
       if (areaM2) formData.append('area_m2', String(areaM2))
       if (bedrooms) formData.append('bedrooms', String(bedrooms))
       if (bathrooms) formData.append('bathrooms', String(bathrooms))
@@ -401,6 +405,24 @@ export default function AdminPropertyForm() {
                   required
                 />
                 {errors.price && <span className="text-xs text-red-500">{errors.price}</span>}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="rentalPrice" className="text-xs font-semibold text-[#1C2B36]">
+                  Preço de Locação (R$/mês)
+                </Label>
+                <Input
+                  id="rentalPrice"
+                  type="number"
+                  min={0}
+                  value={rentalPrice}
+                  onChange={(e) => setRentalPrice(e.target.value ? Number(e.target.value) : '')}
+                  placeholder="Ex: 4500"
+                  className={`text-sm rounded-xl ${errors.rental_price ? 'border-red-500' : 'border-[#E2E6E9]'}`}
+                />
+                {errors.rental_price && (
+                  <span className="text-xs text-red-500">{errors.rental_price}</span>
+                )}
               </div>
             </div>
 

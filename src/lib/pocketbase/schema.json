@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-15T23:10:41.285Z",
+  "generatedAt": "2026-11-15T23:50:15.124Z",
   "collections": [
     {
       "name": "users",
@@ -155,6 +155,12 @@
         },
         {
           "name": "suites",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "rental_price",
           "type": "number",
           "required": false,
           "system": false

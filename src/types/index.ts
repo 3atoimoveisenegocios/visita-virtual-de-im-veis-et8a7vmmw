@@ -4,6 +4,7 @@ export interface Property {
   neighborhood: string
   city: string
   price: number
+  rental_price?: number
   area_m2?: number
   bedrooms?: number
   bathrooms?: number

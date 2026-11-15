@@ -151,12 +151,36 @@ export default function PropertyDetails() {
         </div>
 
         <div className="flex flex-col md:items-end">
-          <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
-            Valor de Venda
-          </span>
-          <div className="text-3xl sm:text-4xl font-extrabold text-[#1F4E5F]">
-            {formatPrice(property.price)}
-          </div>
+          {property.rental_price ? (
+            <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 md:justify-end">
+              <div>
+                <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
+                  Venda
+                </span>
+                <div className="text-3xl sm:text-4xl font-extrabold text-[#1F4E5F]">
+                  {formatPrice(property.price)}
+                </div>
+              </div>
+              <div>
+                <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
+                  Locação
+                </span>
+                <div className="text-3xl sm:text-4xl font-extrabold text-[#1F4E5F]">
+                  {formatPrice(property.rental_price)}
+                  <span className="text-sm font-semibold text-[#5B6B76]">/mês</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
+                Valor de Venda
+              </span>
+              <div className="text-3xl sm:text-4xl font-extrabold text-[#1F4E5F]">
+                {formatPrice(property.price)}
+              </div>
+            </>
+          )}
         </div>
       </div>
 

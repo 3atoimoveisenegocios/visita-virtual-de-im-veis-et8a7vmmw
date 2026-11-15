@@ -206,6 +206,14 @@ export default function AdminPropertiesList() {
                       <span className="font-semibold text-[#1F4E5F]">
                         {formatPrice(prop.price)}
                       </span>
+                      {prop.rental_price ? (
+                        <>
+                          <span>•</span>
+                          <span className="font-semibold text-[#1F4E5F]">
+                            Locação: {formatPrice(prop.rental_price)}/mês
+                          </span>
+                        </>
+                      ) : null}
                     </div>
 
                     <div className="flex items-center gap-3 text-[11px] text-[#5B6B76]">
