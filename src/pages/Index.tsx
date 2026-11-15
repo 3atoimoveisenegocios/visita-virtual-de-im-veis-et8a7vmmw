@@ -351,18 +351,30 @@ export default function Index() {
                   <CardContent className="p-6 flex-1 flex flex-col justify-between">
                     <div>
                       {/* Price Tag */}
-                      <div className="mb-4">
-                        {prop.rental_price ? (
-                          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                            <div>
-                              <span className="text-[11px] uppercase text-[#5B6B76] font-bold tracking-wider">
-                                Venda
-                              </span>
-                              <div className="text-2xl font-extrabold text-[#1F4E5F] tracking-tight">
-                                {formatPrice(prop.price)}
+                      {(prop.price || prop.rental_price) && (
+                        <div className="mb-4">
+                          {prop.price && prop.rental_price ? (
+                            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                              <div>
+                                <span className="text-[11px] uppercase text-[#5B6B76] font-bold tracking-wider">
+                                  Venda
+                                </span>
+                                <div className="text-2xl font-extrabold text-[#1F4E5F] tracking-tight">
+                                  {formatPrice(prop.price)}
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-[11px] uppercase text-[#5B6B76] font-bold tracking-wider">
+                                  Locação
+                                </span>
+                                <div className="text-2xl font-extrabold text-[#1F4E5F] tracking-tight">
+                                  {formatPrice(prop.rental_price)}
+                                  <span className="text-xs font-semibold text-[#5B6B76]">/mês</span>
+                                </div>
                               </div>
                             </div>
-                            <div>
+                          ) : prop.rental_price ? (
+                            <>
                               <span className="text-[11px] uppercase text-[#5B6B76] font-bold tracking-wider">
                                 Locação
                               </span>
@@ -370,19 +382,20 @@ export default function Index() {
                                 {formatPrice(prop.rental_price)}
                                 <span className="text-xs font-semibold text-[#5B6B76]">/mês</span>
                               </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <span className="text-[11px] uppercase text-[#5B6B76] font-bold tracking-wider">
-                              Valor de Venda
-                            </span>
-                            <div className="text-2xl font-extrabold text-[#1F4E5F] tracking-tight">
-                              {formatPrice(prop.price)}
-                            </div>
-                          </>
-                        )}
-                      </div>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-[11px] uppercase text-[#5B6B76] font-bold tracking-wider">
+                                Valor de Venda
+                              </span>
+                              <div className="text-2xl font-extrabold text-[#1F4E5F] tracking-tight">
+                                {formatPrice(prop.price)}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {!prop.price && !prop.rental_price && <div className="mb-4" />}
 
                       {/* Property Amenities Grid */}
                       {hasAmenities ? (

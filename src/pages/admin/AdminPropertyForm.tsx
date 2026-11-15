@@ -116,7 +116,6 @@ export default function AdminPropertyForm() {
     if (!title.trim()) errs.title = 'Título é obrigatório'
     if (!neighborhood.trim()) errs.neighborhood = 'Bairro é obrigatório'
     if (!city.trim()) errs.city = 'Cidade é obrigatória'
-    if (!price || Number(price) <= 0) errs.price = 'Preço deve ser maior que zero'
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -134,7 +133,8 @@ export default function AdminPropertyForm() {
       formData.append('title', title.trim())
       formData.append('neighborhood', neighborhood.trim())
       formData.append('city', city.trim())
-      formData.append('price', String(price))
+      if (price) formData.append('price', String(price))
+      else formData.append('price', '')
       if (rentalPrice) formData.append('rental_price', String(rentalPrice))
       else formData.append('rental_price', '')
       if (areaM2) formData.append('area_m2', String(areaM2))
@@ -393,16 +393,16 @@ export default function AdminPropertyForm() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="price" className="text-xs font-semibold text-[#1C2B36]">
-                  Preço de Venda (R$) *
+                  Preço de Venda (R$) (opcional)
                 </Label>
                 <Input
                   id="price"
                   type="number"
+                  min={0}
                   value={price}
                   onChange={(e) => setPrice(e.target.value ? Number(e.target.value) : '')}
                   placeholder="Ex: 1500000"
                   className={`text-sm rounded-xl ${errors.price ? 'border-red-500' : 'border-[#E2E6E9]'}`}
-                  required
                 />
                 {errors.price && <span className="text-xs text-red-500">{errors.price}</span>}
               </div>

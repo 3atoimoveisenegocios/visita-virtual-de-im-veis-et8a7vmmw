@@ -151,7 +151,7 @@ export default function PropertyDetails() {
         </div>
 
         <div className="flex flex-col md:items-end">
-          {property.rental_price ? (
+          {property.price && property.rental_price ? (
             <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 md:justify-end">
               <div>
                 <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
@@ -171,7 +171,17 @@ export default function PropertyDetails() {
                 </div>
               </div>
             </div>
-          ) : (
+          ) : property.rental_price ? (
+            <>
+              <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
+                Locação
+              </span>
+              <div className="text-3xl sm:text-4xl font-extrabold text-[#1F4E5F]">
+                {formatPrice(property.rental_price)}
+                <span className="text-sm font-semibold text-[#5B6B76]">/mês</span>
+              </div>
+            </>
+          ) : property.price ? (
             <>
               <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
                 Valor de Venda
@@ -180,7 +190,7 @@ export default function PropertyDetails() {
                 {formatPrice(property.price)}
               </div>
             </>
-          )}
+          ) : null}
         </div>
       </div>
 

@@ -202,10 +202,14 @@ export default function AdminPropertiesList() {
                       <span>
                         {prop.neighborhood}, {prop.city}
                       </span>
-                      <span>•</span>
-                      <span className="font-semibold text-[#1F4E5F]">
-                        {formatPrice(prop.price)}
-                      </span>
+                      {prop.price ? (
+                        <>
+                          <span>•</span>
+                          <span className="font-semibold text-[#1F4E5F]">
+                            {formatPrice(prop.price)}
+                          </span>
+                        </>
+                      ) : null}
                       {prop.rental_price ? (
                         <>
                           <span>•</span>

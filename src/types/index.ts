@@ -3,7 +3,7 @@ export interface Property {
   title: string
   neighborhood: string
   city: string
-  price: number
+  price?: number
   rental_price?: number
   area_m2?: number
   bedrooms?: number
