@@ -150,47 +150,28 @@ export default function PropertyDetails() {
           </h1>
         </div>
 
-        <div className="flex flex-col md:items-end">
-          {(property.price ?? 0) > 0 && (property.rental_price ?? 0) > 0 ? (
-            <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 md:justify-end">
-              <div>
-                <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
-                  Venda
-                </span>
-                <div className="text-3xl sm:text-4xl font-extrabold text-[#1F4E5F]">
-                  {formatPrice(property.price)}
-                </div>
-              </div>
-              <div>
-                <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
-                  Locação
-                </span>
-                <div className="text-3xl sm:text-4xl font-extrabold text-[#1F4E5F]">
-                  {formatPrice(property.rental_price)}
-                  <span className="text-sm font-semibold text-[#5B6B76]">/mês</span>
-                </div>
-              </div>
-            </div>
-          ) : (property.rental_price ?? 0) > 0 ? (
-            <>
-              <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
-                Locação
+        <div className="flex flex-wrap md:justify-end gap-x-8 gap-y-3">
+          {(property.price ?? 0) > 0 && (
+            <div className="flex flex-col">
+              <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider mb-1">
+                Venda
               </span>
-              <div className="text-3xl sm:text-4xl font-extrabold text-[#1F4E5F]">
-                {formatPrice(property.rental_price)}
-                <span className="text-sm font-semibold text-[#5B6B76]">/mês</span>
-              </div>
-            </>
-          ) : (property.price ?? 0) > 0 ? (
-            <>
-              <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
-                Valor de Venda
-              </span>
-              <div className="text-3xl sm:text-4xl font-extrabold text-[#1F4E5F]">
+              <div className="text-3xl sm:text-4xl font-extrabold text-[#1F4E5F] whitespace-nowrap">
                 {formatPrice(property.price)}
               </div>
-            </>
-          ) : null}
+            </div>
+          )}
+          {(property.rental_price ?? 0) > 0 && (
+            <div className="flex flex-col">
+              <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider mb-1">
+                Locação
+              </span>
+              <div className="text-3xl sm:text-4xl font-extrabold text-[#1F4E5F] whitespace-nowrap">
+                {formatPrice(property.rental_price)}
+                <span className="text-base sm:text-lg font-semibold text-[#5B6B76]">/mês</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

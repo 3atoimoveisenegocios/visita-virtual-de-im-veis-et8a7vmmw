@@ -1294,20 +1294,39 @@ export default function VirtualTour() {
           {(() => {
             const hasSale = (property.price ?? 0) > 0
             const hasRental = (property.rental_price ?? 0) > 0
+            if (!hasSale && !hasRental) {
+              return (
+                <div className="text-left md:text-right">
+                  <div className="text-[10px] uppercase tracking-wider text-white/50 font-semibold">
+                    Valor
+                  </div>
+                  <div className="text-base sm:text-lg font-extrabold text-[#E07A3F]">Consulte</div>
+                </div>
+              )
+            }
             return (
-              <div className="text-left md:text-right">
-                <div className="text-[10px] uppercase tracking-wider text-white/50 font-semibold">
-                  {hasSale ? 'Valor de venda' : hasRental ? 'Locação' : ''}
-                </div>
-                <div className="text-base sm:text-lg font-extrabold text-[#E07A3F]">
-                  {hasSale && hasRental
-                    ? `${formatPrice(property.price)} • ${formatPrice(property.rental_price)}/mês`
-                    : hasSale
-                      ? formatPrice(property.price)
-                      : hasRental
-                        ? `${formatPrice(property.rental_price)}/mês`
-                        : 'Consulte'}
-                </div>
+              <div className="flex items-start justify-start md:justify-end gap-4 sm:gap-6">
+                {hasSale && (
+                  <div className="text-left md:text-right">
+                    <div className="text-[10px] uppercase tracking-wider text-white/50 font-semibold">
+                      Valor de Venda
+                    </div>
+                    <div className="text-base sm:text-lg font-extrabold text-[#E07A3F] whitespace-nowrap">
+                      {formatPrice(property.price)}
+                    </div>
+                  </div>
+                )}
+                {hasRental && (
+                  <div className="text-left md:text-right">
+                    <div className="text-[10px] uppercase tracking-wider text-white/50 font-semibold">
+                      Valor de Locação
+                    </div>
+                    <div className="text-base sm:text-lg font-extrabold text-[#E07A3F] whitespace-nowrap">
+                      {formatPrice(property.rental_price)}
+                      <span className="text-xs font-semibold text-white/60">/mês</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })()}
