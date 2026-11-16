@@ -351,9 +351,9 @@ export default function Index() {
                   <CardContent className="p-6 flex-1 flex flex-col justify-between">
                     <div>
                       {/* Price Tag */}
-                      {(prop.price || prop.rental_price) && (
+                      {((prop.price ?? 0) > 0 || (prop.rental_price ?? 0) > 0) && (
                         <div className="mb-4">
-                          {prop.price && prop.rental_price ? (
+                          {(prop.price ?? 0) > 0 && (prop.rental_price ?? 0) > 0 ? (
                             <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
                               <div>
                                 <span className="text-[11px] uppercase text-[#5B6B76] font-bold tracking-wider">
@@ -373,7 +373,7 @@ export default function Index() {
                                 </div>
                               </div>
                             </div>
-                          ) : prop.rental_price ? (
+                          ) : (prop.rental_price ?? 0) > 0 ? (
                             <>
                               <span className="text-[11px] uppercase text-[#5B6B76] font-bold tracking-wider">
                                 Locação
@@ -395,7 +395,9 @@ export default function Index() {
                           )}
                         </div>
                       )}
-                      {!prop.price && !prop.rental_price && <div className="mb-4" />}
+                      {(prop.price ?? 0) <= 0 && (prop.rental_price ?? 0) <= 0 && (
+                        <div className="mb-4" />
+                      )}
 
                       {/* Property Amenities Grid */}
                       {hasAmenities ? (

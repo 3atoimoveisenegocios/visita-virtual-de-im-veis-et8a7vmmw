@@ -202,7 +202,7 @@ export default function AdminPropertiesList() {
                       <span>
                         {prop.neighborhood}, {prop.city}
                       </span>
-                      {prop.price ? (
+                      {(prop.price ?? 0) > 0 ? (
                         <>
                           <span>•</span>
                           <span className="font-semibold text-[#1F4E5F]">
@@ -210,7 +210,7 @@ export default function AdminPropertiesList() {
                           </span>
                         </>
                       ) : null}
-                      {prop.rental_price ? (
+                      {(prop.rental_price ?? 0) > 0 ? (
                         <>
                           <span>•</span>
                           <span className="font-semibold text-[#1F4E5F]">

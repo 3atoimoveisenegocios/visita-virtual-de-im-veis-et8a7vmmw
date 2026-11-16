@@ -151,7 +151,7 @@ export default function PropertyDetails() {
         </div>
 
         <div className="flex flex-col md:items-end">
-          {property.price && property.rental_price ? (
+          {(property.price ?? 0) > 0 && (property.rental_price ?? 0) > 0 ? (
             <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 md:justify-end">
               <div>
                 <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
@@ -171,7 +171,7 @@ export default function PropertyDetails() {
                 </div>
               </div>
             </div>
-          ) : property.rental_price ? (
+          ) : (property.rental_price ?? 0) > 0 ? (
             <>
               <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
                 Locação
@@ -181,7 +181,7 @@ export default function PropertyDetails() {
                 <span className="text-sm font-semibold text-[#5B6B76]">/mês</span>
               </div>
             </>
-          ) : property.price ? (
+          ) : (property.price ?? 0) > 0 ? (
             <>
               <span className="text-xs uppercase text-[#5B6B76] font-semibold tracking-wider">
                 Valor de Venda

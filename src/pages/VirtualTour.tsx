@@ -1215,9 +1215,16 @@ export default function VirtualTour() {
                     <div>
                       Localização: {property.neighborhood}, {property.city}
                     </div>
-                    <div className="text-[#E07A3F] font-bold text-sm pt-1">
-                      {formatPrice(property.price)}
-                    </div>
+                    {(property.price ?? 0) > 0 && (
+                      <div className="text-[#E07A3F] font-bold text-sm pt-1">
+                        {formatPrice(property.price)}
+                      </div>
+                    )}
+                    {(property.price ?? 0) <= 0 && (property.rental_price ?? 0) > 0 && (
+                      <div className="text-[#E07A3F] font-bold text-sm pt-1">
+                        {formatPrice(property.rental_price)}/mês
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1284,14 +1291,26 @@ export default function VirtualTour() {
 
         {/* Preço e Botão Compartilhar */}
         <div className="flex items-center justify-between md:justify-end gap-3 pt-2 md:pt-0 border-t md:border-t-0 border-white/10">
-          <div className="text-left md:text-right">
-            <div className="text-[10px] uppercase tracking-wider text-white/50 font-semibold">
-              Valor de venda
-            </div>
-            <div className="text-base sm:text-lg font-extrabold text-[#E07A3F]">
-              {formatPrice(property.price) || 'Consulte'}
-            </div>
-          </div>
+          {(() => {
+            const hasSale = (property.price ?? 0) > 0
+            const hasRental = (property.rental_price ?? 0) > 0
+            return (
+              <div className="text-left md:text-right">
+                <div className="text-[10px] uppercase tracking-wider text-white/50 font-semibold">
+                  {hasSale ? 'Valor de venda' : hasRental ? 'Locação' : ''}
+                </div>
+                <div className="text-base sm:text-lg font-extrabold text-[#E07A3F]">
+                  {hasSale && hasRental
+                    ? `${formatPrice(property.price)} • ${formatPrice(property.rental_price)}/mês`
+                    : hasSale
+                      ? formatPrice(property.price)
+                      : hasRental
+                        ? `${formatPrice(property.rental_price)}/mês`
+                        : 'Consulte'}
+                </div>
+              </div>
+            )
+          })()}
 
           <Button
             onClick={handleShareTour}
@@ -1888,9 +1907,16 @@ export default function VirtualTour() {
                   <div>
                     Localização: {property.neighborhood}, {property.city}
                   </div>
-                  <div className="text-[#E07A3F] font-bold text-sm pt-1">
-                    {formatPrice(property.price)}
-                  </div>
+                  {(property.price ?? 0) > 0 && (
+                    <div className="text-[#E07A3F] font-bold text-sm pt-1">
+                      {formatPrice(property.price)}
+                    </div>
+                  )}
+                  {(property.price ?? 0) <= 0 && (property.rental_price ?? 0) > 0 && (
+                    <div className="text-[#E07A3F] font-bold text-sm pt-1">
+                      {formatPrice(property.rental_price)}/mês
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
